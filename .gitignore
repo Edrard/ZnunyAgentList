@@ -1,0 +1,21 @@
+# Generated package and review artifacts
+*.opm
+*.zip
+dist/
+*-review.txt
+review/
+
+# Windows, Linux, and editor temporary files
+Thumbs.db
+Desktop.ini
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Local logs
+*.log
