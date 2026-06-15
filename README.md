@@ -110,6 +110,82 @@ The package registers operations only. REST routes are mapped manually in Znuny 
 
 Use the operation names from the table above when adding operations to the intended GenericInterface web service. The suggested routes are examples and can be adjusted to local naming standards.
 
+## Optional Web Service Import Template
+
+The repository includes an optional Znuny GenericInterface REST import template:
+
+```text
+examples/webservices/AdvancedZnunyAgentListREST.yml
+```
+
+This YAML is a helper template only. It is not automatically installed by the `.opm` package and is not listed in `ZnunyAgentList.sopm`.
+
+Import it manually after installing `ZnunyAgentList`:
+
+```text
+Admin > Web Services > Add Web Service > Import web service
+```
+
+The recommended imported Web Service name is:
+
+```text
+AdvancedZnunyAgentListREST
+```
+
+Importing a Web Service YAML can overwrite or conflict with an existing Web Service if names are the same. After import, verify the transport, authentication, debugger settings, and route mappings in the Znuny Admin UI. Then rebuild configuration and clear cache as separate administrative steps.
+
+Example endpoint base URL:
+
+```text
+https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST
+```
+
+Smoke test `Health`:
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Health?UserLogin=zabbix.integration&Password=SECRET" | jq .
+```
+
+Expected success:
+
+```json
+{
+  "Plugin": "ZnunyAgentList",
+  "Success": 1,
+  "Time": "2026-06-15 16:22:07",
+  "Version": "1.1.0"
+}
+```
+
+Expected no-auth or wrong-password response:
+
+```json
+{
+  "Error": {
+    "ErrorCode": "ZnunyAgentList.AuthFail",
+    "ErrorMessage": "ZnunyAgentList: Authentication failed."
+  }
+}
+```
+
+Smoke test `Agent`:
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Agent?UserLogin=zabbix.integration&Password=SECRET" | jq .
+```
+
+Expected response contains an `Agents` array.
+
+Smoke test `Queue`:
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Queue?UserLogin=zabbix.integration&Password=SECRET" | jq .
+```
+
+Expected response contains a `Queues` array.
+
+Znuny GenericInterface may return HTTP 200 even for application-level authentication or authorization errors. Integrations must inspect the JSON body for `Success` or `Error`, not only the HTTP status code.
+
 ## Response Shapes
 
 All normal successful operations return:

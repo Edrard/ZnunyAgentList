@@ -10,6 +10,7 @@
 - Added ticket state, priority, type, service, and SLA list operations.
 - Added package-specific `ZnunyAgentList::Config` and `ZnunyAgentList::Health` operations.
 - Added non-mutating `Ticket::ValidateTicketCreate` preflight validation.
+- Added optional `AdvancedZnunyAgentListREST.yml` Web Service import template with all ZnunyAgentList REST routes.
 
 ### Changed
 
@@ -33,6 +34,7 @@
 - Documented required dedicated API group setup using `api_group`.
 - Documented that `Health` is authenticated and group-protected.
 - Documented that `ValidateTicketCreate` never creates tickets.
+- Documented manual Web Service YAML import and smoke-test checks.
 - Corrected pre-install Perl syntax check examples to include the package source root in `@INC`.
 
 ### Validation

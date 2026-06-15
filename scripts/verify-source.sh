@@ -45,9 +45,11 @@ require_file 'ZnunyAgentList.sopm'
 require_file 'Kernel/Config/Files/XML/ZnunyAgentList.xml'
 require_file 'scripts/verify-source.sh'
 require_file 'scripts/build-package.sh'
+require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 
 SOPM="$ROOT/ZnunyAgentList.sopm"
 CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
+WEBSERVICE_YAML="$ROOT/examples/webservices/AdvancedZnunyAgentListREST.yml"
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'
@@ -132,7 +134,7 @@ else
 
     mapfile -t SOPM_LOCATIONS < <(xmllint --xpath '/otrs_package/Filelist/File/@Location' "$SOPM" 2>/dev/null | sed -E 's/ Location="/\n/g; s/"//g' | sed '/^$/d' | sort)
 
-    SOPM_HAS_REPOSITORY_ONLY=$(printf '%s\n' "${SOPM_LOCATIONS[@]}" | grep -E '^(README\.md|CHANGES\.md|LICENSE|\.gitignore|scripts/|dist/|\.git)' || true)
+    SOPM_HAS_REPOSITORY_ONLY=$(printf '%s\n' "${SOPM_LOCATIONS[@]}" | grep -E '^(README\.md|CHANGES\.md|LICENSE|\.gitignore|scripts/|examples/|dist/|\.git)' || true)
     if [ -z "$SOPM_HAS_REPOSITORY_ONLY" ]; then
         pass 'SOPM does not install repository-only files'
     else
@@ -163,6 +165,70 @@ else
             fail "SOPM contains unexpected runtime location: $SopmLocation"
         fi
     done
+fi
+
+if [ -f "$WEBSERVICE_YAML" ]; then
+    if grep -Fq 'AdvancedZnunyAgentListREST' "$WEBSERVICE_YAML"; then
+        pass 'Web Service template contains AdvancedZnunyAgentListREST name'
+    else
+        fail 'Web Service template is missing AdvancedZnunyAgentListREST name'
+    fi
+
+    for OperationType in \
+        'User::AgentList' \
+        'Queue::List' \
+        'Queue::Get' \
+        'CustomerUser::Search' \
+        'CustomerUser::Get' \
+        'Ticket::ResolveTicketDefaults' \
+        'Ticket::StateList' \
+        'Ticket::PriorityList' \
+        'Ticket::TypeList' \
+        'Ticket::ServiceList' \
+        'Ticket::SLAList' \
+        'Ticket::ValidateTicketCreate' \
+        'ZnunyAgentList::Config' \
+        'ZnunyAgentList::Health'
+    do
+        if grep -Fq "Type: $OperationType" "$WEBSERVICE_YAML"; then
+            pass "Web Service template contains operation: $OperationType"
+        else
+            fail "Web Service template is missing operation: $OperationType"
+        fi
+    done
+
+    for Route in \
+        '/Agent' \
+        '/Queue' \
+        '/Queue/:QueueID' \
+        '/QueueByName/:Name' \
+        '/CustomerUser' \
+        '/CustomerUser/:UserLogin' \
+        '/ResolveTicketDefaults' \
+        '/TicketState' \
+        '/TicketPriority' \
+        '/TicketType' \
+        '/Service' \
+        '/SLA' \
+        '/ValidateTicketCreate' \
+        '/SystemConfig' \
+        '/Health'
+    do
+        if grep -Fq "Route: $Route" "$WEBSERVICE_YAML"; then
+            pass "Web Service template contains route: $Route"
+        else
+            fail "Web Service template is missing route: $Route"
+        fi
+    done
+
+    YAML_SECRET_VALUE=$(grep -n -E "(BEGIN [A-Z ]*PRIVATE KEY|SECRET|^[[:space:]]*(Password|Token|SessionID|PrivateKey)[[:space:]]*:[[:space:]]*[^[:space:]'\"~#])" "$WEBSERVICE_YAML" || true)
+    if [ -z "$YAML_SECRET_VALUE" ]; then
+        pass 'Web Service template contains no obvious secret values'
+    else
+        fail 'Web Service template contains possible secret values'
+    fi
+else
+    fail 'Web Service template is missing'
 fi
 
 while IFS= read -r OperationFile; do
