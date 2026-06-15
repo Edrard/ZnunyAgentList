@@ -43,5 +43,6 @@
 
 ### Validation
 
+- Scoped the `ZZZAAuto.pm` reference check to runtime/package files to avoid documentation false positives.
 - Server-side validation on Znuny 6.5.20 is still required.
 - Perl syntax, package build, package installation, GenericInterface discovery, REST behavior, upgrade, and uninstall validation are not claimed by local Windows checks.
