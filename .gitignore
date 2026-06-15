@@ -2,8 +2,10 @@
 *.opm
 *.zip
 dist/
+build/
 *-review.txt
 review/
+tmp/
 
 # Windows, Linux, and editor temporary files
 Thumbs.db
