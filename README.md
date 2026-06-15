@@ -4,7 +4,7 @@
 
 `ZnunyAgentList` is a standalone Znuny 6.5 GenericInterface helper package for external integrations that need safe lookup data and TicketCreate preflight validation.
 
-The package name remains `ZnunyAgentList` and the package version remains `1.0.0`.
+The package name remains `ZnunyAgentList` and the package version is `1.1.0`.
 
 ## What This Package Does
 
@@ -281,7 +281,7 @@ Wildcard-only `CustomerUser::Search` rejection:
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.0.0",
+  "Version": "1.1.0",
   "Features": {
     "AgentList": true,
     "CustomerUserSearch": true,
@@ -299,7 +299,7 @@ Wildcard-only `CustomerUser::Search` rejection:
 {
   "Success": true,
   "Plugin": "ZnunyAgentList",
-  "Version": "1.0.0",
+  "Version": "1.1.0",
   "Time": "2026-06-15 12:00:00"
 }
 ```
@@ -413,7 +413,7 @@ Run Perl syntax checks on the real Znuny server:
 ```bash
 cd /opt/otrs
 find /path/to/ZnunyAgentList/Kernel/GenericInterface/Operation -type f -name '*.pm' -print0 \
-  | xargs -0 -n1 perl -I/opt/otrs -c
+  | xargs -0 -n1 perl -I/path/to/ZnunyAgentList -I/opt/otrs -c
 ```
 
 These checks do not prove package installation, GenericInterface discovery, or REST behavior.
@@ -432,7 +432,7 @@ The helper runs `scripts/verify-source.sh` first, checks that the `otrs` user ca
 Building creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.0.0.opm
+/path/to/output/ZnunyAgentList-1.1.0.opm
 ```
 
 Building does not install the package.
@@ -443,7 +443,7 @@ Installation is a later explicit administrative step:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/ZnunyAgentList-1.0.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/ZnunyAgentList-1.1.0.opm" otrs
 ```
 
 Do not run installation from the Windows development environment.
@@ -527,5 +527,5 @@ Before production uninstall use:
 
 - Local Windows checks are useful for Git hygiene only.
 - Runtime syntax checks, package build, installation, operation discovery, and REST testing require the real Znuny 6.5.20 server.
-- Keep package version `1.0.0` until a release decision is made.
+- Current package version is `1.1.0`.
 - Do not add new GenericInterface operations without updating XML, SOPM, docs, and server-side validation.

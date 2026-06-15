@@ -64,8 +64,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.0.0' ]; then
-        pass 'SOPM version is 1.0.0'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.1.0' ]; then
+        pass 'SOPM version is 1.1.0'
     else
         fail 'Unexpected SOPM version'
     fi
