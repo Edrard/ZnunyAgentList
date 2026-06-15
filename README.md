@@ -1,55 +1,131 @@
 # ZnunyAgentList
 
-ZnunyAgentList is a lightweight Znuny 6.5 extension that provides a secure, read-only GenericInterface REST operation for retrieving active agents with their ID, login, and display name.
+## Purpose
+
+`ZnunyAgentList` is a standalone Znuny 6.5 GenericInterface helper package for external integrations that need safe lookup data and TicketCreate preflight validation.
+
+The package name remains `ZnunyAgentList` and the package version remains `1.0.0`.
+
+## What This Package Does
+
+- Registers read-only GenericInterface operations for agents, queues, customer users, ticket dictionaries, package config, and package health.
+- Provides a non-mutating `Ticket::ValidateTicketCreate` operation that checks a future TicketCreate payload without creating a ticket.
+- Uses standard GenericInterface authentication.
+- Requires an authenticated Znuny agent user.
+- Requires `ro` permission in at least one group configured in `ZnunyAgentList::AllowedGroups`.
+- Returns explicit allow-listed response fields only.
+
+## What This Package Does Not Do
+
+- Does not create tickets.
+- Does not modify tickets, queues, users, customer users, services, SLAs, states, priorities, types, preferences, config, groups, roles, or database rows.
+- Does not call `TicketCreate`.
+- Does not use raw SQL.
+- Does not add database migrations.
+- Does not modify Znuny core files.
+- Does not edit `ZZZAAuto.pm`.
+- Does not create the `api_group` group automatically.
+- Does not install, upgrade, uninstall, rebuild config, clear cache, or deploy automatically.
 
 ## Supported Environment
 
-- Supported Znuny version: Znuny 6.5 LTS
-- Intended validation version: Znuny 6.5.20
-- Intended Znuny installation path: `/opt/otrs`
-- Intended server OS: Rocky Linux 8
-- Intended Znuny runtime user: `otrs`
+- Supported platform: Znuny 6.5 LTS
+- Validation target: Znuny 6.5.20
+- Server path: `/opt/otrs`
+- Server OS: Rocky Linux 8
+- Runtime user: `otrs`
+- Local development: Windows source editing only
 
-The authoritative build, validation, installation, upgrade, and uninstall environment is the real Rocky Linux 8 Znuny 6.5.20 server. Local Windows development is limited to editing repository source files.
+Authoritative Perl syntax checks, package builds, package installation, operation discovery, and REST validation must happen on the real Znuny server. Windows local checks are not runtime validation.
 
-## Verified Znuny 6.5.20 Behavior
+## Security Model
 
-The following details have been verified against the installed Znuny 6.5.20 source code:
+Every operation inherits from `Kernel::GenericInterface::Operation::Common` and authenticates through:
 
-- `UserList(Type => 'Long')` returns user IDs as hash keys and formatted full names as hash values.
-- `NoOutOfOffice => 1` in `UserList()` does not filter out users. It prevents status and out-of-office messages from being appended to the displayed full name.
-- `GetUserData()` creates `OutOfOfficeMessage` only when the current time is within the configured out-of-office start and end dates.
-- `Dev::Package::Build` supports `--module-directory`.
-- GenericInterface operation registration uses `GenericInterface::Operation::ModuleRegistration` navigation.
+```perl
+my ( $UserID, $UserType ) = $Self->Auth(%Param);
+```
 
-These confirmations do not mean the package itself has already built, installed, or run successfully.
+Access is allowed only when all of these are true:
 
-## Operation
+- GenericInterface authentication succeeds.
+- `UserType` is `User`.
+- The authenticated agent has at least `ro` permission in one group configured in:
 
-- GenericInterface operation name: `User::AgentList`
-- Controller: `User`
-- Operation: `AgentList`
-- Access: authenticated Znuny agent users only
-- Behavior: returns active agents and excludes users currently marked out of office.
+```text
+ZnunyAgentList::AllowedGroups
+```
 
-The operation accepts the standard GenericInterface provider authentication handled by `Kernel::GenericInterface::Operation::Common`:
+The default group is:
 
-- `SessionID`
-- `UserLogin` plus `Password`
+```text
+api_group
+```
 
-Customer users and unauthenticated requests are rejected. Invalid credentials are rejected by the standard GenericInterface authentication layer.
+Authentication failures, wrong user type, missing/invalid group config, missing group permission, and group lookup failures all return the same generic error code:
 
-## Response
+```text
+ZnunyAgentList.AuthFail
+```
 
-The response uses an explicit allow-list. Each agent record contains exactly:
+`ZnunyAgentList::Health` is authenticated and group-protected. It is not a public endpoint.
 
-- `UserID`
-- `UserLogin`
-- `UserFullname`
+## Required Manual Security Setup
 
-No password hashes, session identifiers, preferences, email addresses, roles, groups, permissions, complete user records, or arbitrary internal fields are returned.
+Before production use:
 
-Example successful JSON payload after GenericInterface serialization:
+1. Create a dedicated Znuny group named `api_group`.
+2. Create a dedicated API agent user.
+3. Give that API agent `ro` permission in `api_group`.
+4. Use that API agent for GenericInterface API access.
+5. Keep `ZnunyAgentList::AllowedGroups` restricted to `api_group`.
+6. Do not use normal human admin accounts for integrations.
+7. Restrict network access to the GenericInterface web service.
+
+The package does not create or modify groups, users, roles, or permissions.
+
+## Operations Overview
+
+| Suggested Route | HTTP Method | GenericInterface Operation | Purpose | Security Notes |
+| --- | --- | --- | --- | --- |
+| `/Agent` | GET | `User::AgentList` | List active non-out-of-office agents | Agent auth plus allowed group |
+| `/Queue` | GET | `Queue::List` | List valid queues | Agent auth plus allowed group |
+| `/Queue/{QueueID}` | GET | `Queue::Get` | Lookup queue by ID | Agent auth plus allowed group |
+| `/Queue?Name=...` | GET | `Queue::Get` | Lookup queue by name | Agent auth plus allowed group |
+| `/CustomerUser?Search=...` | GET | `CustomerUser::Search` | Search valid customer users | Search is hardened and capped |
+| `/CustomerUser/{UserLogin}` | GET | `CustomerUser::Get` | Lookup customer user by login | Explicit allow-list only |
+| `/ResolveTicketDefaults?...` | GET | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | Business misses return warnings |
+| `/TicketState` | GET | `Ticket::StateList` | List valid ticket states | Dictionary values only |
+| `/TicketPriority` | GET | `Ticket::PriorityList` | List valid ticket priorities | Dictionary values only |
+| `/TicketType` | GET | `Ticket::TypeList` | List valid ticket types | Empty list with warning if unavailable |
+| `/Service` | GET | `Ticket::ServiceList` | List valid services | Empty list with warning if unavailable |
+| `/SLA` | GET | `Ticket::SLAList` | List valid SLAs | Empty list with warning if unavailable |
+| `/SystemConfig` | GET | `ZnunyAgentList::Config` | Return package capabilities | No sensitive environment data |
+| `/Health` | GET | `ZnunyAgentList::Health` | Return package health status | Authenticated, not public |
+| `/ValidateTicketCreate` | POST | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data | Never creates or modifies tickets |
+
+## Suggested REST Route Mapping
+
+The package registers operations only. REST routes are mapped manually in Znuny Admin > Web Services.
+
+Use the operation names from the table above when adding operations to the intended GenericInterface web service. The suggested routes are examples and can be adjusted to local naming standards.
+
+## Response Shapes
+
+All normal successful operations return:
+
+```perl
+{
+    Success => 1,
+    Data    => {
+        ...
+    },
+}
+```
+
+Business validation misses return `Success => 1` with `Found => 0`, `Valid => 0`, `Warnings`, or `Errors` inside `Data`. Authentication and authorization failures use the generic GenericInterface error response.
+
+`User::AgentList`:
 
 ```json
 {
@@ -63,188 +139,393 @@ Example successful JSON payload after GenericInterface serialization:
 }
 ```
 
-Results are sorted deterministically by `UserFullname`, then `UserLogin`, then numeric `UserID`.
+`Queue::List`:
 
-On Znuny 6.5.20, `UserList(Type => 'Long', Valid => 1, NoOutOfOffice => 1)` returns user IDs as hash keys and clean formatted full names as hash values. `NoOutOfOffice => 1` does not filter out current out-of-office users; it prevents runtime status and out-of-office suffixes from being appended to the full name. Current out-of-office users are excluded by checking `OutOfOfficeMessage` from `GetUserData(UserID => ...)`.
-
-If `GetUserData()` cannot return a consistent record with `UserID` and `UserLogin`, that individual user is skipped rather than returning partial internal data. `OutOfOfficeMessage` is used only for filtering and is never returned in the API response.
-
-## Package Source
-
-This repository contains the source package definition (`ZnunyAgentList.sopm`) and package-owned runtime files.
-
-The SOPM file installs only these runtime files:
-
-- `Kernel/GenericInterface/Operation/User/AgentList.pm`
-- `Kernel/Config/Files/XML/ZnunyAgentList.xml`
-
-Repository-only files such as documentation, helper scripts, and Git metadata are not installed by the SOPM file.
-
-The GenericInterface operation registration uses this verified Znuny 6.5.20 SysConfig navigation:
-
-```text
-GenericInterface::Operation::ModuleRegistration
+```json
+{
+  "Queues": [
+    {
+      "QueueID": 12,
+      "Name": "Support",
+      "FullName": "Support",
+      "ValidID": 1
+    }
+  ]
+}
 ```
 
-These SOPM compatibility values are intentional but still require validation against the real Znuny 6.5.20 Package Manager or an authoritative package from the same installation:
+`Queue::Get` found:
 
-- `<otrs_package version="1.1">`
-- `<Framework>6.5.x</Framework>`
+```json
+{
+  "Queue": {
+    "Found": true,
+    "QueueID": 12,
+    "Name": "Support",
+    "FullName": "Support",
+    "ValidID": 1
+  }
+}
+```
+
+`Queue::Get` not found:
+
+```json
+{
+  "Queue": {
+    "Found": false
+  },
+  "Warnings": [
+    "Queue not found."
+  ]
+}
+```
+
+`CustomerUser::Search`:
+
+```json
+{
+  "CustomerUsers": [
+    {
+      "UserLogin": "customer@example.invalid",
+      "UserCustomerID": "ExampleCustomer",
+      "UserFirstname": "Example",
+      "UserLastname": "Customer",
+      "UserEmail": "customer@example.invalid"
+    }
+  ]
+}
+```
+
+Wildcard-only `CustomerUser::Search` rejection:
+
+```json
+{
+  "CustomerUsers": [],
+  "Warnings": [
+    "Search must contain at least 2 non-wildcard characters."
+  ]
+}
+```
+
+`CustomerUser::Get` found:
+
+```json
+{
+  "CustomerUser": {
+    "Found": true,
+    "UserLogin": "customer@example.invalid",
+    "UserCustomerID": "ExampleCustomer",
+    "UserFirstname": "Example",
+    "UserLastname": "Customer",
+    "UserEmail": "customer@example.invalid"
+  }
+}
+```
+
+`CustomerUser::Get` not found:
+
+```json
+{
+  "CustomerUser": {
+    "Found": false
+  },
+  "Warnings": [
+    "CustomerUser not found."
+  ]
+}
+```
+
+`Ticket::ResolveTicketDefaults`:
+
+```json
+{
+  "Input": {
+    "HostName": "Support host.example.invalid"
+  },
+  "Detected": {
+    "QueueName": "Support",
+    "CustomerUserLogin": "SupportClients"
+  },
+  "Queue": {
+    "Found": true,
+    "QueueID": 12,
+    "Name": "Support",
+    "FullName": "Support"
+  },
+  "CustomerUser": {
+    "Found": true,
+    "UserLogin": "SupportClients",
+    "UserCustomerID": "Support"
+  },
+  "Warnings": []
+}
+```
+
+`Ticket::StateList`:
+
+```json
+{
+  "TicketStates": [
+    {
+      "ID": 1,
+      "Name": "new",
+      "ValidID": 1
+    }
+  ]
+}
+```
+
+`ZnunyAgentList::Config`:
+
+```json
+{
+  "Plugin": "ZnunyAgentList",
+  "Version": "1.0.0",
+  "Features": {
+    "AgentList": true,
+    "CustomerUserSearch": true,
+    "ValidateTicketCreate": true
+  },
+  "Znuny": {
+    "Version": "6.5.x"
+  }
+}
+```
+
+`ZnunyAgentList::Health`:
+
+```json
+{
+  "Success": true,
+  "Plugin": "ZnunyAgentList",
+  "Version": "1.0.0",
+  "Time": "2026-06-15 12:00:00"
+}
+```
+
+`Ticket::ValidateTicketCreate` valid:
+
+```json
+{
+  "Valid": true,
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+`Ticket::ValidateTicketCreate` invalid:
+
+```json
+{
+  "Valid": false,
+  "Errors": [
+    "Queue not found."
+  ],
+  "Warnings": []
+}
+```
+
+## Customer User Search Safety
+
+`CustomerUser::Search` sanitizes `Search`, removes wildcard characters from a temporary validation copy, and requires at least 2 meaningful non-wildcard characters. The wildcard characters checked for this minimum are:
+
+```text
+*
+%
+?
+```
+
+Wildcard-only searches such as `**`, `%%`, `??`, or `*%` return an empty result with a warning. This reduces broad customer user enumeration risk. The actual search value is not defaulted to `*`, and `Limit` is capped at 50.
+
+## Ticket Default Resolution Rule
+
+`Ticket::ResolveTicketDefaults` uses the first whitespace-separated `HostName` token:
+
+```text
+QueueName = first HostName token
+CustomerUserLogin = QueueName + "Clients"
+```
+
+It validates the queue with `QueueGet(Name => ...)` and the customer user with `CustomerUserDataGet(User => ...)`. Missing business data returns `Found => 0` and warnings rather than GenericInterface errors.
+
+## TicketCreate Preflight Validation
+
+`Ticket::ValidateTicketCreate` validates:
+
+- `OwnerID`
+- `Queue`
+- `CustomerUser`
+- `State`
+- `Lock`
+
+It never calls `TicketCreate`, never locks or unlocks tickets, and never writes data. It is a lookup-style preflight check only.
+
+## Package Source Layout
+
+Package-owned runtime files live under:
+
+```text
+Kernel/Config/Files/XML/ZnunyAgentList.xml
+Kernel/GenericInterface/Operation/...
+```
+
+Repository-only files include docs, helper scripts, `.gitignore`, review artifacts, logs, and generated packages.
+
+## SOPM / Installed Runtime Files
+
+`ZnunyAgentList.sopm` installs only runtime files:
+
+- `Kernel/Config/Files/XML/ZnunyAgentList.xml`
+- `Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm`
+- `Kernel/GenericInterface/Operation/ZnunyAgentList/Config.pm`
+- `Kernel/GenericInterface/Operation/ZnunyAgentList/Health.pm`
+- operation modules under `Kernel/GenericInterface/Operation/User/`
+- operation modules under `Kernel/GenericInterface/Operation/Queue/`
+- operation modules under `Kernel/GenericInterface/Operation/CustomerUser/`
+- operation modules under `Kernel/GenericInterface/Operation/Ticket/`
+
+The SOPM does not install `README.md`, `CHANGES.md`, `LICENSE`, scripts, Git metadata, review files, logs, or generated `.opm` files.
 
 ## Transfer To Server
 
-Transfer the source tree to a non-production staging path on the Znuny server using one of these approaches:
+Transfer the source tree to a staging path on the Znuny server using one of:
 
 ```bash
 git clone <REPOSITORY_URL> /path/to/ZnunyAgentList
-```
-
-```bash
 scp -r /local/path/ZnunyAgentList <ssh-user>@<znuny-host>:/path/to/ZnunyAgentList
-```
-
-```bash
 rsync -a --exclude .git /local/path/ZnunyAgentList/ <ssh-user>@<znuny-host>:/path/to/ZnunyAgentList/
 ```
 
-Use placeholders only in shared documentation and scripts. Do not store passwords, tokens, or session IDs in this repository.
+Use placeholders only. Do not store credentials, tokens, or session IDs in this repository.
 
-## Server-Side Source Verification
+## Server-Side Verification
 
-From the unpacked or cloned source tree on Rocky Linux 8, you may run the optional read-only helper:
+Run read-only source verification on Rocky Linux 8:
 
 ```bash
 cd /path/to/ZnunyAgentList
 bash scripts/verify-source.sh
 ```
 
-The helper requires `xmllint` for XML checks. If `xmllint` is unavailable, install the standard Rocky Linux `libxml2` package or perform equivalent XML validation manually. The helper does not build, install, uninstall, rebuild configuration, clear cache, or call the REST endpoint.
-
-Run the Perl syntax check from the Znuny installation path:
+Run Perl syntax checks on the real Znuny server:
 
 ```bash
 cd /opt/otrs
-perl -I/opt/otrs -c /path/to/ZnunyAgentList/Kernel/GenericInterface/Operation/User/AgentList.pm
+find /path/to/ZnunyAgentList/Kernel/GenericInterface/Operation -type f -name '*.pm' -print0 \
+  | xargs -0 -n1 perl -I/opt/otrs -c
 ```
 
-This checks syntax only. It does not prove GenericInterface operation discovery, authentication, authorization, SysConfig registration, package installation, or REST behavior.
+These checks do not prove package installation, GenericInterface discovery, or REST behavior.
 
 ## Package Build
 
-Build the final `.opm` package on the real Znuny 6.5.20 server. The confirmed package build command is:
-
-```bash
-cd /opt/otrs
-su -s /bin/bash -c "cd /opt/otrs && bin/otrs.Console.pl Dev::Package::Build --module-directory '/path/to/ZnunyAgentList' '/path/to/ZnunyAgentList/ZnunyAgentList.sopm' '/path/to/output'" otrs
-```
-
-`--module-directory` points to the project root containing `Kernel/...`. The SOPM file is the package source definition. The expected final artifact is:
-
-```text
-/path/to/output/ZnunyAgentList-1.0.0.opm
-```
-
-Building creates the package artifact only. It does not install, upgrade, uninstall, rebuild configuration, clear cache, or deploy to production.
-
-The repository includes a Linux helper that wraps the confirmed build command:
+Build the `.opm` on the Znuny server:
 
 ```bash
 cd /path/to/ZnunyAgentList
 bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 ```
 
-If no output directory is provided, the helper uses `/tmp`. The output directory must already exist and be writable by the `otrs` user. The helper verifies, as `otrs`, that the project directory is readable/searchable, the SOPM and runtime files are readable, and the output directory is writable. It then runs the build through the `otrs` user and verifies that `ZnunyAgentList-1.0.0.opm` was created.
+The helper runs `scripts/verify-source.sh` first, checks that the `otrs` user can read source/runtime files, verifies that the output directory is writable by `otrs`, and runs `Dev::Package::Build` as `otrs`.
 
-## Installation
+Building creates:
 
-Installation is a later explicit server-side step after the `.opm` has been built and reviewed:
+```text
+/path/to/output/ZnunyAgentList-1.0.0.opm
+```
+
+Building does not install the package.
+
+## Package Installation
+
+Installation is a later explicit administrative step:
 
 ```bash
 cd /opt/otrs
 su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/ZnunyAgentList-1.0.0.opm" otrs
 ```
 
-Do not run installation, uninstall, configuration rebuild, cache deletion, or production deployment from the local Windows development environment.
+Do not run installation from the Windows development environment.
 
-Configuration rebuild is a separate later administrative step:
+## Configuration Rebuild and Cache Cleanup
+
+After package installation, rebuild config and clear cache as separate administrative steps:
 
 ```bash
 cd /opt/otrs
 su -s /bin/bash -c "bin/otrs.Console.pl Maint::Config::Rebuild" otrs
-```
-
-Cache deletion is also a separate later administrative step:
-
-```bash
-cd /opt/otrs
 su -s /bin/bash -c "bin/otrs.Console.pl Maint::Cache::Delete" otrs
 ```
 
-Upgrade and uninstall must be planned and validated separately on Znuny 6.5.20. They are not performed by the build helper.
+## Web Service Route Mapping
 
-## Manual Web Service Configuration
+After installation and required Znuny administration steps, manually add the operations to the intended GenericInterface web service in Znuny Admin > Web Services.
 
-After package installation and the required Znuny administration steps on Znuny 6.5.20, configure the REST web service manually in the Znuny Admin UI:
-
-- Web Service: `GenericTicketConnectorREST`
-- Operation: `User::AgentList`
-- Route: `/Agent`
-- HTTP method: `GET`
-- Parser backend: `JSON`
-
-Expected endpoint:
+Validate that the operation names appear as expected, especially:
 
 ```text
-https://otrs.vamark.net/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST/Agent
+ZnunyAgentList::Config
+ZnunyAgentList::Health
 ```
 
-Safe example request using a session header:
+Do not expose the web service publicly without network-level restrictions.
 
-```bash
-curl \
-  -H "X-OTRS-Header-SessionID: <SESSION_ID>" \
-  "https://otrs.vamark.net/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST/Agent"
-```
+## REST Testing Checklist
 
-Safe example request using credential headers:
+On the real Znuny 6.5.20 server, validate:
 
-```bash
-curl \
-  -H "X-OTRS-Header-UserLogin: <AGENT_LOGIN>" \
-  -H "X-OTRS-Header-Password: <PASSWORD>" \
-  "https://otrs.vamark.net/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST/Agent"
-```
-
-Query-string authentication may also be supported by GenericInterface, but headers are preferred for GET requests because credentials in URLs may be exposed through logs, browser history, or intermediary systems. Header authentication still requires validation on the intended Znuny 6.5.20 server.
-
-## Znuny 6.5.20 Validation Checklist
-
-Manual server-side validation must confirm:
-
-- the source XML and Perl checks pass;
-- the package builds successfully as a real `.opm`;
-- the package installs successfully;
-- package verification succeeds;
-- `User::AgentList` appears in Add Operation;
 - unauthenticated requests are rejected;
 - invalid credentials are rejected;
 - authenticated customer users are rejected;
-- authenticated agent users are allowed;
-- only active non-out-of-office agents are returned;
-- only `UserID`, `UserLogin`, and `UserFullname` are returned;
-- no sensitive user fields appear;
-- sorting is deterministic;
-- both supported authentication forms work;
-- the manually configured REST endpoint returns valid JSON;
-- package upgrade behavior works;
-- package uninstall removes only package-owned files.
+- authenticated agents without `api_group` `ro` permission are rejected;
+- the dedicated API agent with `api_group` `ro` permission is allowed;
+- `Health` requires authentication and group permission;
+- customer search rejects wildcard-only values;
+- response payloads contain only explicit allow-listed fields;
+- `ValidateTicketCreate` returns validation results without creating tickets;
+- no operation writes data.
 
-## Upgrade and Uninstall
+## Upgrade Checklist
 
-Version `1.0.0` does not add database tables, migrations, daemon jobs, or install/uninstall handlers. Package ownership is limited to the runtime files listed in `ZnunyAgentList.sopm`, so normal Znuny Package Manager uninstall behavior should remove only package-owned files.
+Before production upgrade use:
 
-Upgrade and uninstall behavior must still be tested on Znuny 6.5.20 before production use.
+- build the new `.opm` on the Znuny server;
+- verify package metadata and installed file list;
+- test GenericInterface operation discovery;
+- test authentication and group authorization;
+- test REST behavior for every route;
+- confirm no unexpected package-owned files are added.
 
-## Current Validation Status
+## Uninstall Checklist
 
-Local source editing is complete for the initial implementation. Server-side Perl syntax validation, package build, package installation, SysConfig discovery, authentication, authorization, REST behavior, upgrade, and uninstall validation remain pending for Znuny 6.5.20.
+Before production uninstall use:
+
+- review package-owned files from the SOPM;
+- confirm no database objects or migrations are involved;
+- uninstall through Znuny Package Manager tooling only after explicit approval;
+- rebuild config and clear cache as separate administrative steps if required;
+- confirm only package-owned files were removed.
+
+## Troubleshooting
+
+- If operations do not appear in Web Service configuration, confirm package installation, config rebuild, cache cleanup, and XML registration.
+- If every request fails with `ZnunyAgentList.AuthFail`, confirm GenericInterface credentials, `UserType`, `ZnunyAgentList::AllowedGroups`, and `ro` permission in `api_group`.
+- If customer search returns an empty list with a warning, confirm the search contains at least 2 non-wildcard characters.
+- If service, SLA, or type operations return warnings, confirm the optional Znuny subsystem is enabled and available.
+- If package build fails, run `bash scripts/verify-source.sh` and confirm the `otrs` user can read the source tree and write the output directory.
+
+## Security Notes
+
+- Use a dedicated API agent, not a normal human admin account.
+- Keep `ZnunyAgentList::AllowedGroups` narrow.
+- Restrict network access to the GenericInterface endpoint.
+- Do not store credentials, tokens, or session IDs in this repository.
+- Do not add raw SQL, migrations, core modifications, write operations, or automatic deployment helpers.
+
+## Development Notes
+
+- Local Windows checks are useful for Git hygiene only.
+- Runtime syntax checks, package build, installation, operation discovery, and REST testing require the real Znuny 6.5.20 server.
+- Keep package version `1.0.0` until a release decision is made.
+- Do not add new GenericInterface operations without updating XML, SOPM, docs, and server-side validation.

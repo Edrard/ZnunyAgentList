@@ -10,6 +10,10 @@ OUTPUT_DIR=${2:-/tmp}
 PACKAGE_NAME=ZnunyAgentList
 PACKAGE_VERSION=1.0.0
 
+printf 'ZnunyAgentList package build helper\n'
+printf 'This helper verifies source and builds an .opm only. It does not install,\n'
+printf 'upgrade, uninstall, rebuild configuration, or clear cache.\n\n'
+
 if ! PROJECT_DIR=$(CDPATH= cd -- "$PROJECT_DIR" && pwd); then
     printf 'ERROR: Project directory does not exist: %s\n' "${1:-$DEFAULT_PROJECT_DIR}" >&2
     exit 1
@@ -73,16 +77,23 @@ require_file "$SOPM_FILE"
 require_file "$PROJECT_DIR/Kernel/GenericInterface/Operation/User/AgentList.pm"
 require_file "$PROJECT_DIR/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 
+printf 'Verifying source tree...\n'
+bash "$PROJECT_DIR/scripts/verify-source.sh"
+
 require_otrs_readable_dir "$ZNUNY_HOME" 'Znuny home'
 require_otrs_readable_dir "$PROJECT_DIR" 'project directory'
 require_otrs_readable_file "$SOPM_FILE" 'SOPM file'
-require_otrs_readable_file "$PROJECT_DIR/Kernel/GenericInterface/Operation/User/AgentList.pm" 'operation module'
-require_otrs_readable_file "$PROJECT_DIR/Kernel/Config/Files/XML/ZnunyAgentList.xml" 'SysConfig XML'
+while IFS= read -r RuntimeFile; do
+    require_otrs_readable_file "$RuntimeFile" 'runtime file'
+done < <(
+    find "$PROJECT_DIR/Kernel/GenericInterface/Operation" -type f -name '*.pm' -print
+    printf '%s\n' "$PROJECT_DIR/Kernel/Config/Files/XML/ZnunyAgentList.xml"
+)
 require_otrs_writable_dir "$OUTPUT_DIR" 'output directory'
 
 BUILD_COMMAND="cd $(quote_arg "$ZNUNY_HOME") && bin/otrs.Console.pl Dev::Package::Build --module-directory $(quote_arg "$PROJECT_DIR") $(quote_arg "$SOPM_FILE") $(quote_arg "$OUTPUT_DIR")"
 
-printf 'Building package as otrs user...\n'
+printf 'Building package as otrs user with Dev::Package::Build...\n'
 su -s /bin/bash -c "$BUILD_COMMAND" otrs
 
 if [ ! -f "$PACKAGE_FILE" ]; then
