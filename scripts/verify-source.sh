@@ -197,11 +197,16 @@ else
     pass "No $AUTO_CONFIG_FILE file found"
 fi
 
-ZZZ_REFERENCE=$(grep -R -n "$AUTO_CONFIG_FILE" "$ROOT" --exclude-dir=.git --exclude='verify-source.sh' || true)
+# Documentation may mention ZZZAAuto.pm as a forbidden modification.
+# Only runtime/package references should fail verification.
+ZZZ_REFERENCE=$(grep -R -n "$AUTO_CONFIG_FILE" \
+    "$ROOT/Kernel" \
+    "$ROOT/ZnunyAgentList.sopm" \
+    2>/dev/null || true)
 if [ -n "$ZZZ_REFERENCE" ]; then
-    fail "$AUTO_CONFIG_FILE reference found in source tree"
+    fail "$AUTO_CONFIG_FILE reference found in runtime package files"
 else
-    pass "No $AUTO_CONFIG_FILE references found"
+    pass "No $AUTO_CONFIG_FILE references found in runtime package files"
 fi
 
 SQL_OR_MIGRATION=$(find "$ROOT" -path "$ROOT/.git" -prune -o \( -name '*.sql' -o -iname 'sql' -o -iname 'database' -o -iname 'migration' -o -iname 'migrations' \) -print -quit)
