@@ -32,7 +32,7 @@ xpath_count() {
     xmllint --xpath "count($1)" "$2" 2>/dev/null
 }
 
-printf 'ZnunyAgentList source verification\n'
+printf 'ZnunyAgentList source verification for server-side review\n'
 printf 'Repository root: %s\n\n' "$ROOT"
 printf 'This script performs read-only source checks. It does not build, install,\n'
 printf 'uninstall, rebuild configuration, clear cache, or call the REST endpoint.\n\n'
@@ -43,18 +43,17 @@ require_file 'LICENSE'
 require_file 'README.md'
 require_file 'ZnunyAgentList.sopm'
 require_file 'Kernel/Config/Files/XML/ZnunyAgentList.xml'
-require_file 'Kernel/GenericInterface/Operation/User/AgentList.pm'
 require_file 'scripts/verify-source.sh'
 require_file 'scripts/build-package.sh'
+
+SOPM="$ROOT/ZnunyAgentList.sopm"
+CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'
 else
-    SOPM="$ROOT/ZnunyAgentList.sopm"
-    CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
-
     if xmllint --noout "$SOPM" >/dev/null 2>&1; then
-        pass 'SOPM XML parses successfully'
+        pass 'SOPM XML is well-formed'
     else
         fail 'SOPM XML does not parse'
     fi
@@ -71,105 +70,138 @@ else
         fail 'Unexpected SOPM version'
     fi
 
-    FILE_COUNT=$(xpath_count '/otrs_package/Filelist/File' "$SOPM")
-    if [ "$FILE_COUNT" = '2' ]; then
-        pass 'SOPM contains exactly two installed files'
-    else
-        fail "SOPM installed file count is $FILE_COUNT, expected 2"
-    fi
-
-    for LOCATION in \
-        'Kernel/GenericInterface/Operation/User/AgentList.pm' \
-        'Kernel/Config/Files/XML/ZnunyAgentList.xml'
-    do
-        COUNT=$(xmllint --xpath "count(/otrs_package/Filelist/File[@Location='$LOCATION'])" "$SOPM" 2>/dev/null)
-        if [ "$COUNT" = '1' ]; then
-            pass "SOPM installs expected file: $LOCATION"
-        else
-            fail "SOPM does not install expected file exactly once: $LOCATION"
-        fi
-    done
-
-    PROHIBITED_COUNT=$(xmllint --xpath "count(/otrs_package/Filelist/File[starts-with(@Location,'scripts/') or starts-with(@Location,'dist/') or starts-with(@Location,'.git')])" "$SOPM" 2>/dev/null)
-    if [ "$PROHIBITED_COUNT" = '0' ]; then
-        pass 'SOPM does not install scripts, dist, or .git paths'
-    else
-        fail 'SOPM installs scripts, dist, or .git paths'
-    fi
-
     if xmllint --noout "$CONFIG_XML" >/dev/null 2>&1; then
-        pass 'SysConfig XML parses successfully'
+        pass 'SysConfig XML is well-formed'
     else
         fail 'SysConfig XML does not parse'
     fi
 
-    SETTING_COUNT=$(xpath_count '/otrs_config/Setting' "$CONFIG_XML")
-    if [ "$SETTING_COUNT" = '1' ]; then
-        pass 'SysConfig XML contains exactly one Setting'
+    SETTING_COUNT=$(xpath_count "/otrs_config/Setting[starts-with(@Name,'GenericInterface::Operation::Module###')]" "$CONFIG_XML")
+    if [ "$SETTING_COUNT" -ge '1' ]; then
+        pass "SysConfig XML contains $SETTING_COUNT operation Setting elements"
     else
-        fail "SysConfig Setting count is $SETTING_COUNT, expected 1"
+        fail 'SysConfig XML contains no operation Setting elements'
     fi
 
-    SETTING_NAME=$(xpath_text '/otrs_config/Setting/@Name' "$CONFIG_XML")
-    if [ "$SETTING_NAME" = 'GenericInterface::Operation::Module###User::AgentList' ]; then
-        pass 'SysConfig setting name is correct'
+    BAD_NAVIGATION_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[starts-with(@Name,'GenericInterface::Operation::Module###') and Navigation!='GenericInterface::Operation::ModuleRegistration'])" "$CONFIG_XML" 2>/dev/null)
+    if [ "$BAD_NAVIGATION_COUNT" = '0' ]; then
+        pass 'All operation registrations use GenericInterface::Operation::ModuleRegistration navigation'
     else
-        fail "Unexpected SysConfig setting name: $SETTING_NAME"
+        fail 'Unexpected SysConfig operation navigation value found'
     fi
 
-    NAVIGATION=$(xpath_text '/otrs_config/Setting/Navigation' "$CONFIG_XML")
-    if [ "$NAVIGATION" = 'GenericInterface::Operation::ModuleRegistration' ]; then
-        pass 'SysConfig navigation is GenericInterface::Operation::ModuleRegistration'
+    BAD_HASH_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[starts-with(@Name,'GenericInterface::Operation::Module###') and (not(Value/Hash/Item[@Key='Name']) or not(Value/Hash/Item[@Key='Controller']) or Value/Hash/Item[@Key='ConfigDialog']!='AdminGenericInterfaceOperationDefault')])" "$CONFIG_XML" 2>/dev/null)
+    if [ "$BAD_HASH_COUNT" = '0' ]; then
+        pass 'All operation registrations contain Name, Controller, and default ConfigDialog'
     else
-        fail "Unexpected SysConfig navigation value: $NAVIGATION"
+        fail 'One or more operation registrations are missing required hash values'
     fi
 
-    for ITEM in \
-        'Name=AgentList' \
-        'Controller=User' \
-        'ConfigDialog=AdminGenericInterfaceOperationDefault'
+    ALLOWED_GROUPS_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='ZnunyAgentList::AllowedGroups'])" "$CONFIG_XML" 2>/dev/null)
+    if [ "$ALLOWED_GROUPS_COUNT" = '1' ]; then
+        pass 'SysConfig contains ZnunyAgentList::AllowedGroups'
+    else
+        fail 'SysConfig must contain ZnunyAgentList::AllowedGroups exactly once'
+    fi
+
+    API_GROUP_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='ZnunyAgentList::AllowedGroups']/Value/Array/Item[.='api_group'])" "$CONFIG_XML" 2>/dev/null)
+    if [ "$API_GROUP_COUNT" = '1' ]; then
+        pass 'Default allowed group is api_group'
+    else
+        fail 'Default allowed group api_group is missing'
+    fi
+
+    OLD_SYSTEM_REGISTRATION_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='GenericInterface::Operation::Module###System::Config' or @Name='GenericInterface::Operation::Module###System::Health'])" "$CONFIG_XML" 2>/dev/null)
+    if [ "$OLD_SYSTEM_REGISTRATION_COUNT" = '0' ]; then
+        pass 'Old System::Config and System::Health registrations are absent'
+    else
+        fail 'Old System::Config or System::Health registration is still present'
+    fi
+
+    for OperationName in \
+        'GenericInterface::Operation::Module###ZnunyAgentList::Config' \
+        'GenericInterface::Operation::Module###ZnunyAgentList::Health'
     do
-        KEY=${ITEM%%=*}
-        EXPECTED=${ITEM#*=}
-        ACTUAL=$(xpath_text "/otrs_config/Setting/Value/Hash/Item[@Key='$KEY']" "$CONFIG_XML")
-        if [ "$ACTUAL" = "$EXPECTED" ]; then
-            pass "Operation registration $KEY is $EXPECTED"
+        OperationCount=$(xmllint --xpath "count(/otrs_config/Setting[@Name='$OperationName'])" "$CONFIG_XML" 2>/dev/null)
+        if [ "$OperationCount" = '1' ]; then
+            pass "Operation registration exists: $OperationName"
         else
-            fail "Unexpected operation registration $KEY value: $ACTUAL"
+            fail "Operation registration missing or duplicated: $OperationName"
         fi
     done
 
-    ITEM_COUNT=$(xpath_count '/otrs_config/Setting/Value/Hash/Item' "$CONFIG_XML")
-    if [ "$ITEM_COUNT" = '3' ]; then
-        pass 'Operation registration hash contains exactly three items'
+    mapfile -t SOPM_LOCATIONS < <(xmllint --xpath '/otrs_package/Filelist/File/@Location' "$SOPM" 2>/dev/null | sed -E 's/ Location="/\n/g; s/"//g' | sed '/^$/d' | sort)
+
+    SOPM_HAS_REPOSITORY_ONLY=$(printf '%s\n' "${SOPM_LOCATIONS[@]}" | grep -E '^(README\.md|CHANGES\.md|LICENSE|\.gitignore|scripts/|dist/|\.git)' || true)
+    if [ -z "$SOPM_HAS_REPOSITORY_ONLY" ]; then
+        pass 'SOPM does not install repository-only files'
     else
-        fail "Operation registration hash item count is $ITEM_COUNT, expected 3"
+        fail "SOPM installs repository-only files: $SOPM_HAS_REPOSITORY_ONLY"
     fi
+
+    mapfile -t RUNTIME_FILES < <(
+        {
+            find "$ROOT/Kernel/GenericInterface/Operation" -type f -name '*.pm' -printf '%P\n' | sed 's#^#Kernel/GenericInterface/Operation/#'
+            printf '%s\n' 'Kernel/Config/Files/XML/ZnunyAgentList.xml'
+        } | sort
+    )
+
+    for RuntimeFile in "${RUNTIME_FILES[@]}"; do
+        require_file "$RuntimeFile"
+
+        if printf '%s\n' "${SOPM_LOCATIONS[@]}" | grep -Fxq "$RuntimeFile"; then
+            pass "SOPM contains runtime file: $RuntimeFile"
+        else
+            fail "SOPM is missing runtime file: $RuntimeFile"
+        fi
+    done
+
+    for SopmLocation in "${SOPM_LOCATIONS[@]}"; do
+        if printf '%s\n' "${RUNTIME_FILES[@]}" | grep -Fxq "$SopmLocation"; then
+            :
+        else
+            fail "SOPM contains unexpected runtime location: $SopmLocation"
+        fi
+    done
 fi
 
-if grep -q 'use strict;' "$ROOT/Kernel/GenericInterface/Operation/User/AgentList.pm"; then
-    pass 'Perl source contains use strict'
+while IFS= read -r OperationFile; do
+    OperationPath=${OperationFile#"$ROOT/"}
+
+    case "$OperationPath" in
+        Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm)
+            continue
+            ;;
+    esac
+
+    if grep -q 'use parent qw(Kernel::GenericInterface::Operation::Common);' "$OperationFile"; then
+        pass "Operation uses GenericInterface base class: $OperationPath"
+    else
+        fail "Operation does not use GenericInterface base class: $OperationPath"
+    fi
+done < <(find "$ROOT/Kernel/GenericInterface/Operation" -type f -name '*.pm' | sort)
+
+SYSTEM_OPERATION_FILE=$(find "$ROOT/Kernel/GenericInterface/Operation/System" -type f -name '*.pm' -print -quit 2>/dev/null || true)
+if [ -n "$SYSTEM_OPERATION_FILE" ]; then
+    fail 'Old System operation files are still present'
 else
-    fail 'Perl source does not contain use strict'
+    pass 'No old System operation files found'
 fi
 
-if grep -q 'use warnings;' "$ROOT/Kernel/GenericInterface/Operation/User/AgentList.pm"; then
-    pass 'Perl source contains use warnings'
-else
-    fail 'Perl source does not contain use warnings'
-fi
+AUTO_CONFIG_FILE='ZZZ''AAuto.pm'
 
-if grep -q 'Kernel::GenericInterface::Operation::Common' "$ROOT/Kernel/GenericInterface/Operation/User/AgentList.pm"; then
-    pass 'Perl source uses Kernel::GenericInterface::Operation::Common'
-else
-    fail 'Perl source does not use Kernel::GenericInterface::Operation::Common'
-fi
-
-ZZZ_AUTO=$(find "$ROOT" -path "$ROOT/.git" -prune -o -name 'ZZZAAuto.pm' -print -quit)
+ZZZ_AUTO=$(find "$ROOT" -path "$ROOT/.git" -prune -o -name "$AUTO_CONFIG_FILE" -print -quit)
 if [ -n "$ZZZ_AUTO" ]; then
-    fail 'ZZZAAuto.pm is present in the source tree'
+    fail "$AUTO_CONFIG_FILE is present in the source tree"
 else
-    pass 'No ZZZAAuto.pm file found'
+    pass "No $AUTO_CONFIG_FILE file found"
+fi
+
+ZZZ_REFERENCE=$(grep -R -n "$AUTO_CONFIG_FILE" "$ROOT" --exclude-dir=.git --exclude='verify-source.sh' || true)
+if [ -n "$ZZZ_REFERENCE" ]; then
+    fail "$AUTO_CONFIG_FILE reference found in source tree"
+else
+    pass "No $AUTO_CONFIG_FILE references found"
 fi
 
 SQL_OR_MIGRATION=$(find "$ROOT" -path "$ROOT/.git" -prune -o \( -name '*.sql' -o -iname 'sql' -o -iname 'database' -o -iname 'migration' -o -iname 'migrations' \) -print -quit)
@@ -177,6 +209,20 @@ if [ -n "$SQL_OR_MIGRATION" ]; then
     fail 'SQL or migration files/directories are present in the source tree'
 else
     pass 'No SQL or migration files/directories found'
+fi
+
+RAW_SQL=$(grep -R -n -E '\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' || true)
+if [ -n "$RAW_SQL" ]; then
+    fail 'Obvious raw SQL keyword found in operation files'
+else
+    pass 'No obvious raw SQL found in operation files'
+fi
+
+WRITE_STYLE_CALLS=$(grep -R -n -E '\b(TicketCreate|TicketUpdate|TicketLockSet|TicketUnlock|SetPreferences|QueueUpdate|QueueAdd|CustomerUserAdd|CustomerUserUpdate|SLAAdd|SLAUpdate|ServiceAdd|ServiceUpdate|PriorityAdd|PriorityUpdate|StateAdd|StateUpdate|TypeAdd|TypeUpdate)\s*\(|DB->Do\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' || true)
+if [ -n "$WRITE_STYLE_CALLS" ]; then
+    fail 'Obvious write-style method call found in operation files'
+else
+    pass 'No obvious write-style method calls found in operation files'
 fi
 
 POWERSHELL_FILE=$(find "$ROOT" -path "$ROOT/.git" -prune -o -name '*.ps1' -print -quit)
@@ -193,7 +239,8 @@ else
     pass 'No generated .opm files found'
 fi
 
-printf '\nWARNING: Final compatibility requires validation on Znuny 6.5.20.\n'
+printf '\nWARNING: This read-only check does not prove Perl syntax, package build, installation, operation discovery, or REST behavior.\n'
+printf 'WARNING: Complete runtime validation still requires the real Znuny 6.5.20 server.\n'
 printf 'Summary: %s error(s).\n' "$ERRORS"
 
 if [ "$ERRORS" -gt 0 ]; then

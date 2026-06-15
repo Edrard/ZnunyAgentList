@@ -5,38 +5,20 @@ use warnings;
 
 use parent qw(Kernel::GenericInterface::Operation::Common);
 
+use Kernel::GenericInterface::Operation::ZnunyAgentList::Common;
+
 our $ObjectManagerDisabled = 1;
 
 sub new {
-    my ( $Type, %Param ) = @_;
-
-    my $Self = {};
-    bless( $Self, $Type );
-
-    for my $Needed (qw(DebuggerObject WebserviceID)) {
-        if ( !$Param{$Needed} ) {
-            return {
-                Success      => 0,
-                ErrorMessage => "Got no $Needed!",
-            };
-        }
-
-        $Self->{$Needed} = $Param{$Needed};
-    }
-
-    return $Self;
+    return Kernel::GenericInterface::Operation::ZnunyAgentList::Common->New(@_);
 }
 
 sub Run {
     my ( $Self, %Param ) = @_;
 
-    my ( $UserID, $UserType ) = $Self->Auth(%Param);
-
-    if ( !$UserID || !defined $UserType || $UserType ne 'User' ) {
-        return $Self->ReturnError(
-            ErrorCode    => 'AgentList.AuthFail',
-            ErrorMessage => 'AgentList: Authentication failed.',
-        );
+    my ( $AuthOK, $AuthError ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->AuthenticateAgent( $Self, %Param );
+    if ( !$AuthOK ) {
+        return $AuthError;
     }
 
     my $UserObject = $Kernel::OM->Get('Kernel::System::User');

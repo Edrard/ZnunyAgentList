@@ -6,9 +6,23 @@
     <Vendor>Vamark</Vendor>
     <URL>https://github.com/vamark/ZnunyAgentList</URL>
     <License>GPL-3.0-or-later</License>
-    <Description Lang="en">Provides a secure, read-only GenericInterface operation for listing active Znuny agents.</Description>
+    <Description Lang="en">Provides secure, read-only GenericInterface helper operations for Znuny integrations.</Description>
     <Filelist>
-        <File Permission="644" Location="Kernel/GenericInterface/Operation/User/AgentList.pm" />
         <File Permission="644" Location="Kernel/Config/Files/XML/ZnunyAgentList.xml" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/User/AgentList.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Queue/List.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Queue/Get.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Search.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Get.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/ResolveTicketDefaults.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/StateList.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/PriorityList.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/TypeList.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/ServiceList.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/SLAList.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/ValidateTicketCreate.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/ZnunyAgentList/Config.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/ZnunyAgentList/Health.pm" />
     </Filelist>
 </otrs_package>

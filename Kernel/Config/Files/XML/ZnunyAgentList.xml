@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <otrs_config version="2.0" init="Application">
+    <Setting Name="ZnunyAgentList::AllowedGroups" Required="1" Valid="1">
+        <Description Translatable="1">Group names allowed to use the ZnunyAgentList GenericInterface helper operations. Agents must have at least ro permission in one configured group. The package does not create groups, users, roles, or permissions.</Description>
+        <Navigation>GenericInterface</Navigation>
+        <Value>
+            <Array>
+                <Item ValueType="String">api_group</Item>
+            </Array>
+        </Value>
+    </Setting>
     <Setting Name="GenericInterface::Operation::Module###User::AgentList" Required="0" Valid="1">
         <Description Translatable="1">GenericInterface operation module registration for the read-only agent list operation.</Description>
         <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
@@ -7,6 +16,149 @@
             <Hash>
                 <Item Key="Name">AgentList</Item>
                 <Item Key="Controller">User</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Queue::List" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only queue list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">List</Item>
+                <Item Key="Controller">Queue</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Queue::Get" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only queue get operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Get</Item>
+                <Item Key="Controller">Queue</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###CustomerUser::Search" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only customer user search operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Search</Item>
+                <Item Key="Controller">CustomerUser</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###CustomerUser::Get" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only customer user get operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Get</Item>
+                <Item Key="Controller">CustomerUser</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::ResolveTicketDefaults" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the ticket defaults resolver operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">ResolveTicketDefaults</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::StateList" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only ticket state list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">StateList</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::PriorityList" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only ticket priority list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">PriorityList</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::TypeList" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only ticket type list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">TypeList</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::ServiceList" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only service list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">ServiceList</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::SLAList" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only SLA list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">SLAList</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::ValidateTicketCreate" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the non-mutating ticket create validation operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">ValidateTicketCreate</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###ZnunyAgentList::Config" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the package capability config operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Config</Item>
+                <Item Key="Controller">ZnunyAgentList</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###ZnunyAgentList::Health" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the package health operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Health</Item>
+                <Item Key="Controller">ZnunyAgentList</Item>
                 <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
             </Hash>
         </Value>
