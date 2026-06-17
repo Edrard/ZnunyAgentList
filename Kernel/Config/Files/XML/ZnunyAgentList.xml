@@ -10,7 +10,7 @@
         </Value>
     </Setting>
     <Setting Name="ZnunyAgentList::AllowedWriteGroups" Required="0" Valid="1">
-        <Description Translatable="1">Group names prepared for future controlled ZnunyAgentList ticket write operations. Stage 1 does not register or expose write operations.</Description>
+        <Description Translatable="1">Group names allowed to use controlled ZnunyAgentList ticket write operations. Agents must have at least ro permission in one configured write group.</Description>
         <Navigation>GenericInterface</Navigation>
         <Value>
             <Array>
@@ -18,21 +18,21 @@
         </Value>
     </Setting>
     <Setting Name="ZnunyAgentList::EnableTicketWriteOperations" Required="0" Valid="1">
-        <Description Translatable="1">Feature flag prepared for future controlled ZnunyAgentList ticket write operations. Stage 1 keeps write operations disabled and unregistered.</Description>
+        <Description Translatable="1">Feature flag for controlled ZnunyAgentList ticket write operations. The default value keeps write operations disabled.</Description>
         <Navigation>GenericInterface</Navigation>
         <Value>
             <Item ValueType="Checkbox">0</Item>
         </Value>
     </Setting>
     <Setting Name="ZnunyAgentList::ReopenState" Required="0" Valid="1">
-        <Description Translatable="1">Ticket state prepared for future controlled reopen operation.</Description>
+        <Description Translatable="1">Ticket state used by the controlled reopen operation when no request state is provided.</Description>
         <Navigation>GenericInterface</Navigation>
         <Value>
             <Item ValueType="String">open</Item>
         </Value>
     </Setting>
     <Setting Name="ZnunyAgentList::CloseState" Required="0" Valid="1">
-        <Description Translatable="1">Ticket state prepared for future controlled close operation.</Description>
+        <Description Translatable="1">Ticket state used by the controlled close operation when no request state is provided.</Description>
         <Navigation>GenericInterface</Navigation>
         <Value>
             <Item ValueType="String">closed successful</Item>
