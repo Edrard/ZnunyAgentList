@@ -2,13 +2,14 @@
 
 ## Purpose
 
-`ZnunyAgentList` is a standalone Znuny 6.5 GenericInterface helper package for external integrations that need safe lookup data and TicketCreate preflight validation.
+`ZnunyAgentList` is a standalone Znuny 6.5 GenericInterface helper package for external integrations that need a controlled REST API for safe lookup data, ticket read/search metadata, and TicketCreate preflight validation.
 
-The package name remains `ZnunyAgentList` and the package version is `1.1.0`.
+The package name remains `ZnunyAgentList` and the package version is `1.2.0`.
 
 ## What This Package Does
 
-- Registers read-only GenericInterface operations for agents, queues, customer users, ticket dictionaries, package config, and package health.
+- Registers read-only GenericInterface operations for agents, queues, customer users, tickets, ticket dictionaries, package config, and package health.
+- Provides safe `Ticket::Get` and `Ticket::Search` metadata operations with explicit response allow-lists.
 - Provides a non-mutating `Ticket::ValidateTicketCreate` operation that checks a future TicketCreate payload without creating a ticket.
 - Uses standard GenericInterface authentication.
 - Requires an authenticated Znuny agent user.
@@ -20,6 +21,7 @@ The package name remains `ZnunyAgentList` and the package version is `1.1.0`.
 - Does not create tickets.
 - Does not modify tickets, queues, users, customer users, services, SLAs, states, priorities, types, preferences, config, groups, roles, or database rows.
 - Does not call `TicketCreate`.
+- Does not register generic unrestricted `TicketUpdate` as a package operation.
 - Does not use raw SQL.
 - Does not add database migrations.
 - Does not modify Znuny core files.
@@ -46,7 +48,7 @@ Every operation inherits from `Kernel::GenericInterface::Operation::Common` and 
 my ( $UserID, $UserType ) = $Self->Auth(%Param);
 ```
 
-Access is allowed only when all of these are true:
+Read operation access is allowed only when all of these are true:
 
 - GenericInterface authentication succeeds.
 - `UserType` is `User`.
@@ -69,6 +71,17 @@ ZnunyAgentList.AuthFail
 ```
 
 `ZnunyAgentList::Health` is authenticated and group-protected. It is not a public endpoint.
+
+Stage 1 for version `1.2.0` adds passive write-control settings for future controlled ticket write operations:
+
+```text
+ZnunyAgentList::AllowedWriteGroups
+ZnunyAgentList::EnableTicketWriteOperations
+ZnunyAgentList::ReopenState
+ZnunyAgentList::CloseState
+```
+
+These settings do not expose write operations in stage 1. `AllowedWriteGroups` defaults to an empty list, `EnableTicketWriteOperations` defaults to `0`, `ReopenState` defaults to `open`, and `CloseState` defaults to `closed successful`.
 
 ## Required Manual Security Setup
 
@@ -94,8 +107,10 @@ The package does not create or modify groups, users, roles, or permissions.
 | `/Queue?Name=...` | GET | `Queue::Get` | Lookup queue by name | Agent auth plus allowed group |
 | `/CustomerUser?Search=...` | GET | `CustomerUser::Search` | Search valid customer users | Search is hardened and capped |
 | `/CustomerUser/{UserLogin}` | GET | `CustomerUser::Get` | Lookup customer user by login | Explicit allow-list only |
+| Stage 2 route mapping pending | GET | `Ticket::Get` | Lookup ticket metadata by `TicketID` or `TicketNumber` | Explicit allow-list only |
+| Stage 2 route mapping pending | GET | `Ticket::Search` | Safe filtered ticket search | Requires at least one filter and capped result limits |
 | `/ResolveTicketDefaults?...` | GET | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | Business misses return warnings |
-| `/TicketState` | GET | `Ticket::StateList` | List valid ticket states | Dictionary values only |
+| `/TicketState` | GET | `Ticket::StateList` | List valid ticket states with state type | Dictionary values only |
 | `/TicketPriority` | GET | `Ticket::PriorityList` | List valid ticket priorities | Dictionary values only |
 | `/TicketType` | GET | `Ticket::TypeList` | List valid ticket types | Empty list with warning if unavailable |
 | `/Service` | GET | `Ticket::ServiceList` | List valid services | Empty list with warning if unavailable |
@@ -110,6 +125,8 @@ The package registers operations only. REST routes are mapped manually in Znuny 
 
 Use the operation names from the table above when adding operations to the intended GenericInterface web service. The suggested routes are examples and can be adjusted to local naming standards.
 
+Stage 1 of version `1.2.0` registers `Ticket::Get` and `Ticket::Search`, but `examples/webservices/AdvancedZnunyAgentListREST.yml` is intentionally not updated with ticket read/search routes yet. The Web Service YAML route update is planned for stage 2 after the remaining controlled ticket operations exist.
+
 ## Optional Web Service Import Template
 
 The repository includes an optional Znuny GenericInterface REST import template:
@@ -118,7 +135,7 @@ The repository includes an optional Znuny GenericInterface REST import template:
 examples/webservices/AdvancedZnunyAgentListREST.yml
 ```
 
-This YAML is a helper template only. It is not automatically installed by the `.opm` package and is not listed in `ZnunyAgentList.sopm`.
+This YAML is a helper template only. It is not automatically installed by the `.opm` package and is not listed in `ZnunyAgentList.sopm`. The stage 1 `1.2.0` ticket read/search operations are not added to this YAML yet; the template will be updated in stage 2.
 
 Import it manually after installing `ZnunyAgentList`:
 
@@ -153,7 +170,7 @@ Expected success:
   "Plugin": "ZnunyAgentList",
   "Success": 1,
   "Time": "2026-06-15 16:22:07",
-  "Version": "1.1.0"
+  "Version": "1.2.0"
 }
 ```
 
@@ -338,6 +355,49 @@ Wildcard-only `CustomerUser::Search` rejection:
 }
 ```
 
+`Ticket::Get`:
+
+```json
+{
+  "Found": true,
+  "Ticket": {
+    "TicketID": 123,
+    "TicketNumber": "2026061710000012",
+    "Title": "Example ticket",
+    "QueueID": 12,
+    "Queue": "Support",
+    "OwnerID": 4,
+    "Owner": "agent.login",
+    "CustomerUserID": "customer.login",
+    "CustomerUser": "customer.login",
+    "StateID": 4,
+    "State": "open",
+    "StateType": "open",
+    "PriorityID": 3,
+    "Priority": "3 normal",
+    "Created": "2026-06-17 10:00:00",
+    "Changed": "2026-06-17 10:15:00"
+  },
+  "Warnings": []
+}
+```
+
+`Ticket::Search` without filters:
+
+```json
+{
+  "Tickets": [],
+  "Count": 0,
+  "Limit": 50,
+  "Offset": 0,
+  "Warnings": [
+    "At least one search filter is required."
+  ]
+}
+```
+
+`Ticket::Search` requires at least one meaningful filter. It defaults to `Limit = 50`, caps `Limit` at `100`, caps `Offset` at `1000`, accepts `Offset` or `Page`, and allow-lists `SortBy` to `TicketID`, `TicketNumber`, `Created`, `Changed`, `State`, `Priority`, `Queue`, `Owner`, or `Title`.
+
 `Ticket::StateList`:
 
 ```json
@@ -345,7 +405,11 @@ Wildcard-only `CustomerUser::Search` rejection:
   "TicketStates": [
     {
       "ID": 1,
+      "StateID": 1,
       "Name": "new",
+      "State": "new",
+      "StateTypeID": 1,
+      "StateType": "new",
       "ValidID": 1
     }
   ]
@@ -357,10 +421,12 @@ Wildcard-only `CustomerUser::Search` rejection:
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.1.0",
+  "Version": "1.2.0",
   "Features": {
     "AgentList": true,
     "CustomerUserSearch": true,
+    "TicketGet": true,
+    "TicketSearch": true,
     "ValidateTicketCreate": true
   },
   "Znuny": {
@@ -375,7 +441,7 @@ Wildcard-only `CustomerUser::Search` rejection:
 {
   "Success": true,
   "Plugin": "ZnunyAgentList",
-  "Version": "1.1.0",
+  "Version": "1.2.0",
   "Time": "2026-06-15 12:00:00"
 }
 ```
@@ -508,7 +574,7 @@ The helper runs `scripts/verify-source.sh` first, checks that the `otrs` user ca
 Building creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.1.0.opm
+/path/to/output/ZnunyAgentList-1.2.0.opm
 ```
 
 Building does not install the package.
@@ -519,7 +585,7 @@ Installation is a later explicit administrative step:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/ZnunyAgentList-1.1.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/ZnunyAgentList-1.2.0.opm" otrs
 ```
 
 Do not run installation from the Windows development environment.
@@ -603,5 +669,5 @@ Before production uninstall use:
 
 - Local Windows checks are useful for Git hygiene only.
 - Runtime syntax checks, package build, installation, operation discovery, and REST testing require the real Znuny 6.5.20 server.
-- Current package version is `1.1.0`.
+- Current package version is `1.2.0`.
 - Do not add new GenericInterface operations without updating XML, SOPM, docs, and server-side validation.

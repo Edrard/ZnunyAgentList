@@ -6,7 +6,7 @@ use warnings;
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.1.0';
+use constant PACKAGE_VERSION => '1.2.0';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 
 sub New {
@@ -69,6 +69,12 @@ sub AuthenticateAgent {
     return $Class->AuthError($Self);
 }
 
+sub AuthenticateReadAgent {
+    my ( $Class, @Param ) = @_;
+
+    return $Class->AuthenticateAgent(@Param);
+}
+
 sub AuthError {
     my ( $Class, $Self ) = @_;
 
@@ -84,10 +90,22 @@ sub AuthError {
 sub AllowedGroups {
     my ($Class) = @_;
 
+    return $Class->_ConfiguredGroups('ZnunyAgentList::AllowedGroups');
+}
+
+sub AllowedWriteGroups {
+    my ($Class) = @_;
+
+    return $Class->_ConfiguredGroups('ZnunyAgentList::AllowedWriteGroups');
+}
+
+sub _ConfiguredGroups {
+    my ( $Class, $SettingName ) = @_;
+
     my $ConfigObject = eval { $Kernel::OM->Get('Kernel::Config') };
     return if !$ConfigObject;
 
-    my $ConfiguredGroups = $ConfigObject->Get('ZnunyAgentList::AllowedGroups');
+    my $ConfiguredGroups = $ConfigObject->Get($SettingName);
     my @Groups;
 
     if ( ref $ConfiguredGroups eq 'ARRAY' ) {
@@ -194,6 +212,147 @@ sub Limit {
     $Max ||= 50;
 
     return $Limit > $Max ? $Max : $Limit;
+}
+
+sub SearchLimit {
+    my ( $Class, $Value ) = @_;
+
+    return $Class->Limit( $Value, 50, 100 );
+}
+
+sub SearchOffset {
+    my ( $Class, $OffsetValue, $PageValue, $Limit ) = @_;
+
+    my $Offset = $Class->PositiveInt($OffsetValue);
+    return $Offset if defined $Offset;
+
+    my $Page = $Class->PositiveInt($PageValue) || 1;
+    $Limit ||= 50;
+
+    return ( $Page - 1 ) * $Limit;
+}
+
+sub SafeDate {
+    my ( $Class, $Value ) = @_;
+
+    my $Date = $Class->SafeString( $Value, 32 );
+    return q{} if $Date eq q{};
+
+    return $Date if $Date =~ m{\A[0-9]{4}-[0-9]{2}-[0-9]{2}(?: [0-9]{2}:[0-9]{2}:[0-9]{2})?\z};
+
+    return q{};
+}
+
+sub SortBy {
+    my ( $Class, $Value ) = @_;
+
+    my $SortBy = $Class->SafeString( $Value, 32 ) || 'Created';
+    my %Allowed = map { $_ => 1 } qw(TicketID TicketNumber Created Changed State Priority Queue Owner Title);
+
+    return $Allowed{$SortBy} ? $SortBy : 'Created';
+}
+
+sub SortDirection {
+    my ( $Class, $Value ) = @_;
+
+    my $Direction = uc $Class->SafeString( $Value, 8 );
+
+    return $Direction eq 'ASC' ? 'ASC' : 'DESC';
+}
+
+sub TicketLookup {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    return if !$TicketObject;
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+
+    if ( !$TicketID && defined $Param{TicketNumber} ) {
+        my $TicketNumber = $Class->SafeString( $Param{TicketNumber}, 64 );
+        if ($TicketNumber) {
+            $TicketID = eval {
+                $TicketObject->TicketIDLookup(
+                    TicketNumber => $TicketNumber,
+                    UserID       => $Param{UserID} || 1,
+                );
+            };
+        }
+    }
+
+    return if !$TicketID;
+
+    my %Ticket = eval {
+        $TicketObject->TicketGet(
+            TicketID      => $TicketID,
+            UserID        => $Param{UserID} || 1,
+            DynamicFields => 0,
+        );
+    };
+
+    return if $@ || !$Ticket{TicketID};
+
+    return $Class->SafeTicketData(%Ticket);
+}
+
+sub SafeTicketData {
+    my ( $Class, %Ticket ) = @_;
+
+    my $SafeTicket = {
+        TicketID       => 0 + ( $Ticket{TicketID} || 0 ),
+        TicketNumber   => $Ticket{TicketNumber}   // q{},
+        Title          => $Ticket{Title}          // q{},
+        QueueID        => 0 + ( $Ticket{QueueID} || 0 ),
+        Queue          => $Ticket{Queue}          // q{},
+        OwnerID        => 0 + ( $Ticket{OwnerID} || 0 ),
+        Owner          => $Ticket{Owner}          // q{},
+        CustomerUserID => $Ticket{CustomerUserID} // q{},
+        CustomerUser   => $Ticket{CustomerUser}   // q{},
+        StateID        => 0 + ( $Ticket{StateID} || 0 ),
+        State          => $Ticket{State}          // q{},
+        StateType      => $Ticket{StateType} || $Ticket{StateTypeName} || q{},
+        PriorityID     => 0 + ( $Ticket{PriorityID} || 0 ),
+        Priority       => $Ticket{Priority}       // q{},
+        Created        => $Ticket{Created}        || $Ticket{CreateTime} || q{},
+        Changed        => $Ticket{Changed}        || $Ticket{ChangeTime} || q{},
+    };
+
+    if ( defined $Ticket{CloseTime} && $Ticket{CloseTime} ne q{} ) {
+        $SafeTicket->{CloseTime} = $Ticket{CloseTime};
+    }
+    elsif ( defined $Ticket{Closed} && $Ticket{Closed} ne q{} ) {
+        $SafeTicket->{Closed} = $Ticket{Closed};
+    }
+
+    if ( !$SafeTicket->{StateType} && $SafeTicket->{StateID} ) {
+        my $StateTypeData = $Class->StateTypeData( StateID => $SafeTicket->{StateID} ) || {};
+        $SafeTicket->{StateType} = $StateTypeData->{StateType} || q{};
+    }
+
+    return $SafeTicket;
+}
+
+sub StateTypeData {
+    my ( $Class, %Param ) = @_;
+
+    my $StateObject = eval { $Kernel::OM->Get('Kernel::System::State') };
+    return if !$StateObject;
+
+    my %StateData;
+
+    if ( $Param{StateID} ) {
+        %StateData = eval { $StateObject->StateGet( ID => $Param{StateID} ) };
+    }
+    elsif ( $Param{State} ) {
+        %StateData = eval { $StateObject->StateGet( Name => $Param{State} ) };
+    }
+
+    return if $@ || !%StateData;
+
+    return {
+        StateTypeID => 0 + ( $StateData{TypeID} || $StateData{StateTypeID} || 0 ),
+        StateType   => $StateData{TypeName} || $StateData{StateType} || q{},
+    };
 }
 
 sub CustomerUserData {

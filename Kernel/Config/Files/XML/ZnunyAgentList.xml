@@ -9,6 +9,35 @@
             </Array>
         </Value>
     </Setting>
+    <Setting Name="ZnunyAgentList::AllowedWriteGroups" Required="0" Valid="1">
+        <Description Translatable="1">Group names prepared for future controlled ZnunyAgentList ticket write operations. Stage 1 does not register or expose write operations.</Description>
+        <Navigation>GenericInterface</Navigation>
+        <Value>
+            <Array>
+            </Array>
+        </Value>
+    </Setting>
+    <Setting Name="ZnunyAgentList::EnableTicketWriteOperations" Required="0" Valid="1">
+        <Description Translatable="1">Feature flag prepared for future controlled ZnunyAgentList ticket write operations. Stage 1 keeps write operations disabled and unregistered.</Description>
+        <Navigation>GenericInterface</Navigation>
+        <Value>
+            <Item ValueType="Checkbox">0</Item>
+        </Value>
+    </Setting>
+    <Setting Name="ZnunyAgentList::ReopenState" Required="0" Valid="1">
+        <Description Translatable="1">Ticket state prepared for future controlled reopen operation.</Description>
+        <Navigation>GenericInterface</Navigation>
+        <Value>
+            <Item ValueType="String">open</Item>
+        </Value>
+    </Setting>
+    <Setting Name="ZnunyAgentList::CloseState" Required="0" Valid="1">
+        <Description Translatable="1">Ticket state prepared for future controlled close operation.</Description>
+        <Navigation>GenericInterface</Navigation>
+        <Value>
+            <Item ValueType="String">closed successful</Item>
+        </Value>
+    </Setting>
     <Setting Name="GenericInterface::Operation::Module###User::AgentList" Required="0" Valid="1">
         <Description Translatable="1">GenericInterface operation module registration for the read-only agent list operation.</Description>
         <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
@@ -60,6 +89,28 @@
             <Hash>
                 <Item Key="Name">Get</Item>
                 <Item Key="Controller">CustomerUser</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::Get" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the safe read-only ticket get operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Get</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::Search" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the safe read-only ticket search operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Search</Item>
+                <Item Key="Controller">Ticket</Item>
                 <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
             </Hash>
         </Value>

@@ -32,6 +32,8 @@ sub Run {
                 QueueGet              => 1,
                 CustomerUserSearch    => 1,
                 CustomerUserGet       => 1,
+                TicketGet             => 1,
+                TicketSearch          => 1,
                 ResolveTicketDefaults => 1,
                 TicketStateList       => 1,
                 TicketPriorityList    => 1,
