@@ -18,6 +18,7 @@
 - Updated `AdvancedZnunyAgentListREST` template with full read/write ticket routes.
 - Updated README with final `1.2.0` REST API documentation.
 - Updated verification checks for controlled write operations.
+- Strengthened source verification for controlled write security guardrails and corrected write setting descriptions.
 
 ### Validation
 

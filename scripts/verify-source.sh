@@ -134,6 +134,20 @@ else
         fi
     done
 
+    ALLOWED_WRITE_GROUP_DEFAULT_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='ZnunyAgentList::AllowedWriteGroups']/Value/Array/Item)" "$CONFIG_XML" 2>/dev/null)
+    if [ "$ALLOWED_WRITE_GROUP_DEFAULT_COUNT" = '0' ]; then
+        pass 'Default write group list is empty'
+    else
+        fail 'Default write group list must be empty'
+    fi
+
+    ENABLE_WRITE_DEFAULT=$(xpath_text "/otrs_config/Setting[@Name='ZnunyAgentList::EnableTicketWriteOperations']/Value/Item" "$CONFIG_XML")
+    if [ "$ENABLE_WRITE_DEFAULT" = '0' ]; then
+        pass 'Default write operation feature flag is disabled'
+    else
+        fail 'Default write operation feature flag must be disabled'
+    fi
+
     for OperationName in \
         'GenericInterface::Operation::Module###Ticket::Get' \
         'GenericInterface::Operation::Module###Ticket::Search' \
@@ -160,7 +174,7 @@ else
 
     mapfile -t SOPM_LOCATIONS < <(xmllint --xpath '/otrs_package/Filelist/File/@Location' "$SOPM" 2>/dev/null | sed -E 's/ Location="/\n/g; s/"//g' | sed '/^$/d' | sort)
 
-    SOPM_HAS_REPOSITORY_ONLY=$(printf '%s\n' "${SOPM_LOCATIONS[@]}" | grep -E '^(README\.md|CHANGES\.md|LICENSE|\.gitignore|scripts/|examples/|dist/|\.git)' || true)
+    SOPM_HAS_REPOSITORY_ONLY=$(printf '%s\n' "${SOPM_LOCATIONS[@]}" | grep -E '^(README\.md|CHANGES\.md|LICENSE|\.gitignore|scripts/|examples/|review/|build/|tmp/|dist/|\.git|.*\.(opm|zip|log)$)' || true)
     if [ -z "$SOPM_HAS_REPOSITORY_ONLY" ]; then
         pass 'SOPM does not install repository-only files'
     else
@@ -265,7 +279,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         fail 'Web Service template contains possible secret values'
     fi
 
-    if grep -Fq 'Ticket::TicketUpdate' "$WEBSERVICE_YAML"; then
+    if grep -E '(^[[:space:]]*TicketUpdate:|Type:[[:space:]]*(Ticket::TicketUpdate|TicketUpdate)\b|Route:.*TicketUpdate)' "$WEBSERVICE_YAML" >/dev/null 2>&1; then
         fail 'Web Service template exposes generic TicketUpdate'
     else
         pass 'Web Service template does not expose generic TicketUpdate'
@@ -297,14 +311,14 @@ for WriteOperation in ArticleCreate Close Reopen; do
         fail "Write operation EnableTicketWriteOperations gate not found: Ticket::$WriteOperation"
     fi
 
-    if grep -E 'Param\(.*ArticleType|Param\(.*SenderType|Param\(.*HistoryType|Param\(.*HistoryComment|Param\(.*From|Param\(.*To|Param\(.*Cc|Param\(.*Bcc' "$WriteFile" >/dev/null 2>&1; then
+    if grep -E 'Param\(.*(ArticleType|SenderType|HistoryType|HistoryComment|From|To|Cc|Bcc|MimeType|Charset|Loop|AutoResponseType|TimeUnit|NoAgentNotify|ForceNotificationToUserID|ExcludeMuteNotificationToUserID|ExcludeNotificationToUserID)' "$WriteFile" >/dev/null 2>&1; then
         fail "Write operation accepts unsafe article internals: Ticket::$WriteOperation"
     else
         pass "Write operation does not accept unsafe article internals: Ticket::$WriteOperation"
     fi
 done
 
-if grep -R -n -E 'Param\(.*(Queue|OwnerID|Owner|Priority|StateID|Lock|CustomerUser|Title)' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Close.pm" "$ROOT/Kernel/GenericInterface/Operation/Ticket/Reopen.pm" >/dev/null 2>&1; then
+if grep -R -n -E 'Param\(.*(QueueID|Queue|OwnerID|Owner|PriorityID|Priority|StateID|TypeID|ServiceID|SLAID|DynamicField|PendingTime|Lock|CustomerUser|Title)' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Close.pm" "$ROOT/Kernel/GenericInterface/Operation/Ticket/Reopen.pm" >/dev/null 2>&1; then
     fail 'Close/Reopen expose generic TicketUpdate-style fields'
 else
     pass 'Close/Reopen do not expose generic TicketUpdate-style fields'
