@@ -137,6 +137,9 @@ else
     for OperationName in \
         'GenericInterface::Operation::Module###Ticket::Get' \
         'GenericInterface::Operation::Module###Ticket::Search' \
+        'GenericInterface::Operation::Module###Ticket::ArticleCreate' \
+        'GenericInterface::Operation::Module###Ticket::Close' \
+        'GenericInterface::Operation::Module###Ticket::Reopen' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Config' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Health'
     do
@@ -147,13 +150,6 @@ else
             fail "Operation registration missing or duplicated: $OperationName"
         fi
     done
-
-    FUTURE_WRITE_REGISTRATION_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='GenericInterface::Operation::Module###Ticket::ArticleCreate' or @Name='GenericInterface::Operation::Module###Ticket::Reopen' or @Name='GenericInterface::Operation::Module###Ticket::Close'])" "$CONFIG_XML" 2>/dev/null)
-    if [ "$FUTURE_WRITE_REGISTRATION_COUNT" = '0' ]; then
-        pass 'Stage 2 write operation registrations are absent'
-    else
-        fail 'Stage 2 write operation registration is present'
-    fi
 
     TICKET_UPDATE_REGISTRATION_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='GenericInterface::Operation::Module###Ticket::TicketUpdate' or @Name='GenericInterface::Operation::Module###TicketUpdate'])" "$CONFIG_XML" 2>/dev/null)
     if [ "$TICKET_UPDATE_REGISTRATION_COUNT" = '0' ]; then
@@ -210,6 +206,11 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         'Queue::Get' \
         'CustomerUser::Search' \
         'CustomerUser::Get' \
+        'Ticket::Search' \
+        'Ticket::Get' \
+        'Ticket::ArticleCreate' \
+        'Ticket::Close' \
+        'Ticket::Reopen' \
         'Ticket::ResolveTicketDefaults' \
         'Ticket::StateList' \
         'Ticket::PriorityList' \
@@ -234,6 +235,12 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/QueueByName/:Name' \
         '/CustomerUser' \
         '/CustomerUser/:UserLogin' \
+        '/Ticket' \
+        '/Ticket/:TicketID' \
+        '/TicketNumber/:TicketNumber' \
+        '/TicketArticle' \
+        '/TicketClose' \
+        '/TicketReopen' \
         '/ResolveTicketDefaults' \
         '/TicketState' \
         '/TicketPriority' \
@@ -257,6 +264,12 @@ if [ -f "$WEBSERVICE_YAML" ]; then
     else
         fail 'Web Service template contains possible secret values'
     fi
+
+    if grep -Fq 'Ticket::TicketUpdate' "$WEBSERVICE_YAML"; then
+        fail 'Web Service template exposes generic TicketUpdate'
+    else
+        pass 'Web Service template does not expose generic TicketUpdate'
+    fi
 else
     fail 'Web Service template is missing'
 fi
@@ -266,6 +279,35 @@ if grep -Fq 'SearchLimit(' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Searc
     pass 'Ticket::Search enforces default limit 50 and max limit 100'
 else
     fail 'Ticket::Search default/max limit enforcement was not found'
+fi
+
+for WriteOperation in ArticleCreate Close Reopen; do
+    WriteFile="$ROOT/Kernel/GenericInterface/Operation/Ticket/$WriteOperation.pm"
+
+    if grep -Fq 'AuthenticateWriteAgent' "$WriteFile"; then
+        pass "Write operation uses write authorization helper: Ticket::$WriteOperation"
+    else
+        fail "Write operation does not use write authorization helper: Ticket::$WriteOperation"
+    fi
+
+    if grep -Fq 'AuthenticateWriteAgent' "$WriteFile" \
+        && grep -Fq 'WriteOperationsEnabled' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+        pass "Write operation is gated by EnableTicketWriteOperations: Ticket::$WriteOperation"
+    else
+        fail "Write operation EnableTicketWriteOperations gate not found: Ticket::$WriteOperation"
+    fi
+
+    if grep -E 'Param\(.*ArticleType|Param\(.*SenderType|Param\(.*HistoryType|Param\(.*HistoryComment|Param\(.*From|Param\(.*To|Param\(.*Cc|Param\(.*Bcc' "$WriteFile" >/dev/null 2>&1; then
+        fail "Write operation accepts unsafe article internals: Ticket::$WriteOperation"
+    else
+        pass "Write operation does not accept unsafe article internals: Ticket::$WriteOperation"
+    fi
+done
+
+if grep -R -n -E 'Param\(.*(Queue|OwnerID|Owner|Priority|StateID|Lock|CustomerUser|Title)' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Close.pm" "$ROOT/Kernel/GenericInterface/Operation/Ticket/Reopen.pm" >/dev/null 2>&1; then
+    fail 'Close/Reopen expose generic TicketUpdate-style fields'
+else
+    pass 'Close/Reopen do not expose generic TicketUpdate-style fields'
 fi
 
 while IFS= read -r OperationFile; do

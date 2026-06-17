@@ -17,6 +17,9 @@
         <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Get.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Get.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Search.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/ArticleCreate.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Close.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Reopen.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/ResolveTicketDefaults.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/StateList.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/PriorityList.pm" />

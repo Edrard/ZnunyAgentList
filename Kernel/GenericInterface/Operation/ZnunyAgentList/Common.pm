@@ -8,6 +8,7 @@ our $ObjectManagerDisabled = 1;
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
 use constant PACKAGE_VERSION => '1.2.0';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
+use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
 sub New {
     my ( $Class, $Type, %Param ) = @_;
@@ -75,6 +76,50 @@ sub AuthenticateReadAgent {
     return $Class->AuthenticateAgent(@Param);
 }
 
+sub AuthenticateWriteAgent {
+    my ( $Class, $Self, %Param ) = @_;
+
+    my ( $UserID, $UserType ) = $Self->Auth(%Param);
+
+    if ( !$UserID || !defined $UserType || $UserType ne 'User' ) {
+        return $Class->AuthError($Self);
+    }
+
+    if ( !$Class->WriteOperationsEnabled ) {
+        return $Class->WriteForbidden($Self);
+    }
+
+    my @AllowedGroups = $Class->AllowedWriteGroups;
+    if ( !@AllowedGroups ) {
+        return $Class->WriteForbidden($Self);
+    }
+
+    my $GroupObject = eval { $Kernel::OM->Get('Kernel::System::Group') };
+    if ( !$GroupObject ) {
+        return $Class->WriteForbidden($Self);
+    }
+
+    my %UserGroups = eval {
+        reverse $GroupObject->PermissionUserGet(
+            UserID => $UserID,
+            Type   => 'ro',
+        );
+    };
+    if ($@) {
+        return $Class->WriteForbidden($Self);
+    }
+
+    for my $GroupName (@AllowedGroups) {
+        next if !$GroupName;
+
+        if ( $UserGroups{$GroupName} ) {
+            return ( 1, undef, $UserID, $UserType );
+        }
+    }
+
+    return $Class->WriteForbidden($Self);
+}
+
 sub AuthError {
     my ( $Class, $Self ) = @_;
 
@@ -91,6 +136,27 @@ sub AllowedGroups {
     my ($Class) = @_;
 
     return $Class->_ConfiguredGroups('ZnunyAgentList::AllowedGroups');
+}
+
+sub WriteForbidden {
+    my ( $Class, $Self ) = @_;
+
+    return (
+        0,
+        $Self->ReturnError(
+            ErrorCode    => WRITE_ERROR_CODE,
+            ErrorMessage => 'ZnunyAgentList: Write operation is not allowed.',
+        ),
+    );
+}
+
+sub WriteOperationsEnabled {
+    my ($Class) = @_;
+
+    my $ConfigObject = eval { $Kernel::OM->Get('Kernel::Config') };
+    return 0 if !$ConfigObject;
+
+    return $ConfigObject->Get('ZnunyAgentList::EnableTicketWriteOperations') ? 1 : 0;
 }
 
 sub AllowedWriteGroups {
@@ -353,6 +419,132 @@ sub StateTypeData {
         StateTypeID => 0 + ( $StateData{TypeID} || $StateData{StateTypeID} || 0 ),
         StateType   => $StateData{TypeName} || $StateData{StateType} || q{},
     };
+}
+
+sub ArticleKindData {
+    my ( $Class, $Kind ) = @_;
+
+    $Kind = $Class->SafeString( $Kind, 32 );
+
+    my %Mapping = (
+        reply => {
+            Kind                 => 'reply',
+            ChannelName          => 'Email',
+            SenderType           => 'agent',
+            IsVisibleForCustomer => 1,
+            HistoryType          => 'EmailCustomer',
+            HistoryComment       => 'Controlled public reply',
+        },
+        internal_note => {
+            Kind                 => 'internal_note',
+            ChannelName          => 'Internal',
+            SenderType           => 'agent',
+            IsVisibleForCustomer => 0,
+            HistoryType          => 'AddNote',
+            HistoryComment       => 'Controlled internal note',
+        },
+    );
+
+    return $Mapping{$Kind};
+}
+
+sub SafeContentType {
+    my ( $Class, $Value ) = @_;
+
+    my $ContentType = $Class->SafeString( $Value, 120 );
+    return 'text/plain; charset=utf8' if $ContentType eq q{};
+
+    return $ContentType if $ContentType =~ m{\A[-+./;=a-zA-Z0-9_ ]+\z};
+
+    return 'text/plain; charset=utf8';
+}
+
+sub TicketArticleCreate {
+    my ( $Class, %Param ) = @_;
+
+    my $KindData = $Class->ArticleKindData( $Param{Kind} );
+    return if !$KindData;
+
+    my $ArticleObject = eval { $Kernel::OM->Get('Kernel::System::Ticket::Article') };
+    return if !$ArticleObject;
+
+    my $ArticleID = eval {
+        $ArticleObject->ArticleCreate(
+            TicketID             => $Param{TicketID},
+            ChannelName          => $KindData->{ChannelName},
+            SenderType           => $KindData->{SenderType},
+            IsVisibleForCustomer => $KindData->{IsVisibleForCustomer},
+            Subject              => $Param{Subject},
+            Body                 => $Param{Body},
+            ContentType          => $Param{ContentType} || 'text/plain; charset=utf8',
+            HistoryType          => $KindData->{HistoryType},
+            HistoryComment       => $Param{HistoryComment} || $KindData->{HistoryComment},
+            UserID               => $Param{UserID},
+        );
+    };
+
+    return if $@ || !$ArticleID;
+
+    return 0 + $ArticleID;
+}
+
+sub ConfigString {
+    my ( $Class, $Name, $Default, $MaxLength ) = @_;
+
+    my $ConfigObject = eval { $Kernel::OM->Get('Kernel::Config') };
+    return $Default if !$ConfigObject;
+
+    my $Value = $ConfigObject->Get($Name);
+    $Value = $Default if !defined $Value || ref $Value;
+
+    return $Class->SafeString( $Value, $MaxLength || 100 );
+}
+
+sub StateData {
+    my ( $Class, $State ) = @_;
+
+    $State = $Class->SafeString( $State, 100 );
+    return if $State eq q{};
+
+    my $StateObject = eval { $Kernel::OM->Get('Kernel::System::State') };
+    return if !$StateObject;
+
+    my %StateData = eval { $StateObject->StateGet( Name => $State ) };
+    return if $@ || !$StateData{ID};
+
+    my $StateTypeData = $Class->StateTypeData( StateID => $StateData{ID} ) || {};
+
+    return {
+        StateID     => 0 + $StateData{ID},
+        State       => $StateData{Name} || $State,
+        StateTypeID => 0 + ( $StateTypeData->{StateTypeID} || 0 ),
+        StateType   => $StateTypeData->{StateType} || q{},
+    };
+}
+
+sub IsClosedStateType {
+    my ( $Class, $StateType ) = @_;
+
+    $StateType = lc $Class->SafeString( $StateType, 100 );
+
+    return $StateType =~ m{\Aclosed} ? 1 : 0;
+}
+
+sub TicketStateUpdate {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    return if !$TicketObject;
+
+    my $Success = eval {
+        $TicketObject->TicketStateSet(
+            TicketID => $Param{TicketID},
+            State    => $Param{State},
+            UserID   => $Param{UserID},
+        );
+    };
+
+    return $@ ? undef : $Success;
 }
 
 sub CustomerUserData {

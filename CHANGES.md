@@ -7,16 +7,21 @@
 - Added safe `Ticket::Get` operation.
 - Added safe `Ticket::Search` operation with enforced default and maximum limits.
 - Added write-control SysConfig settings for future controlled write operations.
+- Added controlled `Ticket::ArticleCreate` operation.
+- Added controlled `Ticket::Close` operation.
+- Added controlled `Ticket::Reopen` operation.
 
 ### Changed
 
 - Enhanced `Ticket::StateList` with state type information.
-- Updated documentation and verification checks for stage 1.
+- Enforced write permission checks with `ZnunyAgentList::EnableTicketWriteOperations` and `ZnunyAgentList::AllowedWriteGroups`.
+- Updated `AdvancedZnunyAgentListREST` template with full read/write ticket routes.
+- Updated README with final `1.2.0` REST API documentation.
+- Updated verification checks for controlled write operations.
 
 ### Validation
 
 - Server build, package installation, Web Service YAML import, operation discovery, REST validation, upgrade, and uninstall validation are still pending.
-- The Web Service YAML route update is deferred to stage 2.
 
 ## 1.1.0 - 2026-06-15
 
