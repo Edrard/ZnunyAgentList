@@ -115,6 +115,39 @@
             </Hash>
         </Value>
     </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::ArticleCreate" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the controlled ticket article create operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">ArticleCreate</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::Close" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the controlled ticket close operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Close</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::Reopen" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the controlled ticket reopen operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Reopen</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
     <Setting Name="GenericInterface::Operation::Module###Ticket::ResolveTicketDefaults" Required="0" Valid="1">
         <Description Translatable="1">GenericInterface operation module registration for the ticket defaults resolver operation.</Description>
         <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>

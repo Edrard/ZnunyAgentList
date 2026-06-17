@@ -10,6 +10,7 @@ The package name remains `ZnunyAgentList` and the package version is `1.2.0`.
 
 - Registers read-only GenericInterface operations for agents, queues, customer users, tickets, ticket dictionaries, package config, and package health.
 - Provides safe `Ticket::Get` and `Ticket::Search` metadata operations with explicit response allow-lists.
+- Provides controlled `Ticket::ArticleCreate`, `Ticket::Close`, and `Ticket::Reopen` write operations that are disabled by default.
 - Provides a non-mutating `Ticket::ValidateTicketCreate` operation that checks a future TicketCreate payload without creating a ticket.
 - Uses standard GenericInterface authentication.
 - Requires an authenticated Znuny agent user.
@@ -19,7 +20,8 @@ The package name remains `ZnunyAgentList` and the package version is `1.2.0`.
 ## What This Package Does Not Do
 
 - Does not create tickets.
-- Does not modify tickets, queues, users, customer users, services, SLAs, states, priorities, types, preferences, config, groups, roles, or database rows.
+- Does not modify queues, users, customer users, services, SLAs, states, priorities, types, preferences, config, groups, roles, or database rows.
+- Does not modify arbitrary ticket fields.
 - Does not call `TicketCreate`.
 - Does not register generic unrestricted `TicketUpdate` as a package operation.
 - Does not use raw SQL.
@@ -72,7 +74,7 @@ ZnunyAgentList.AuthFail
 
 `ZnunyAgentList::Health` is authenticated and group-protected. It is not a public endpoint.
 
-Stage 1 for version `1.2.0` adds passive write-control settings for future controlled ticket write operations:
+Version `1.2.0` includes write-control settings for controlled ticket write operations:
 
 ```text
 ZnunyAgentList::AllowedWriteGroups
@@ -81,7 +83,15 @@ ZnunyAgentList::ReopenState
 ZnunyAgentList::CloseState
 ```
 
-These settings do not expose write operations in stage 1. `AllowedWriteGroups` defaults to an empty list, `EnableTicketWriteOperations` defaults to `0`, `ReopenState` defaults to `open`, and `CloseState` defaults to `closed successful`.
+Write operations are disabled and unconfigured by default. `AllowedWriteGroups` defaults to an empty list, `EnableTicketWriteOperations` defaults to `0`, `ReopenState` defaults to `open`, and `CloseState` defaults to `closed successful`.
+
+To enable controlled write operations after installing the package:
+
+1. Create a dedicated write group for API agents.
+2. Add only approved API agent users to that group with `ro` permission.
+3. Set `ZnunyAgentList::AllowedWriteGroups` to that group.
+4. Set `ZnunyAgentList::EnableTicketWriteOperations` to `1`.
+5. Keep read-only integrations in `ZnunyAgentList::AllowedGroups` when they do not need writes.
 
 ## Required Manual Security Setup
 
@@ -107,8 +117,12 @@ The package does not create or modify groups, users, roles, or permissions.
 | `/Queue?Name=...` | GET | `Queue::Get` | Lookup queue by name | Agent auth plus allowed group |
 | `/CustomerUser?Search=...` | GET | `CustomerUser::Search` | Search valid customer users | Search is hardened and capped |
 | `/CustomerUser/{UserLogin}` | GET | `CustomerUser::Get` | Lookup customer user by login | Explicit allow-list only |
-| Stage 2 route mapping pending | GET | `Ticket::Get` | Lookup ticket metadata by `TicketID` or `TicketNumber` | Explicit allow-list only |
-| Stage 2 route mapping pending | GET | `Ticket::Search` | Safe filtered ticket search | Requires at least one filter and capped result limits |
+| `/Ticket/{TicketID}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketID` | Explicit allow-list only |
+| `/TicketNumber/{TicketNumber}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketNumber` | Explicit allow-list only |
+| `/Ticket?...` | GET | `Ticket::Search` | Safe filtered ticket search | Requires at least one filter and capped result limits |
+| `/TicketArticle` | POST | `Ticket::ArticleCreate` | Add controlled reply or internal note | Requires write flag plus write group |
+| `/TicketClose` | POST | `Ticket::Close` | Close ticket with required reason | Requires closed target state and write group |
+| `/TicketReopen` | POST | `Ticket::Reopen` | Reopen closed ticket with required reason | Requires non-closed target state and write group |
 | `/ResolveTicketDefaults?...` | GET | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | Business misses return warnings |
 | `/TicketState` | GET | `Ticket::StateList` | List valid ticket states with state type | Dictionary values only |
 | `/TicketPriority` | GET | `Ticket::PriorityList` | List valid ticket priorities | Dictionary values only |
@@ -125,7 +139,7 @@ The package registers operations only. REST routes are mapped manually in Znuny 
 
 Use the operation names from the table above when adding operations to the intended GenericInterface web service. The suggested routes are examples and can be adjusted to local naming standards.
 
-Stage 1 of version `1.2.0` registers `Ticket::Get` and `Ticket::Search`, but `examples/webservices/AdvancedZnunyAgentListREST.yml` is intentionally not updated with ticket read/search routes yet. The Web Service YAML route update is planned for stage 2 after the remaining controlled ticket operations exist.
+The repository Web Service template includes the recommended `1.2.0` read/search/write ticket routes. Import and verify the template manually; it is not installed by the package.
 
 ## Optional Web Service Import Template
 
@@ -135,7 +149,7 @@ The repository includes an optional Znuny GenericInterface REST import template:
 examples/webservices/AdvancedZnunyAgentListREST.yml
 ```
 
-This YAML is a helper template only. It is not automatically installed by the `.opm` package and is not listed in `ZnunyAgentList.sopm`. The stage 1 `1.2.0` ticket read/search operations are not added to this YAML yet; the template will be updated in stage 2.
+This YAML is a helper template only. It is not automatically installed by the `.opm` package and is not listed in `ZnunyAgentList.sopm`.
 
 Import it manually after installing `ZnunyAgentList`:
 
@@ -200,6 +214,84 @@ curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/Advan
 ```
 
 Expected response contains a `Queues` array.
+
+Ticket get by `TicketID`:
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Ticket/123?UserLogin=zabbix.integration&Password=SECRET" | jq .
+```
+
+Ticket get by `TicketNumber`:
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketNumber/2026061710000012?UserLogin=zabbix.integration&Password=SECRET" | jq .
+```
+
+Ticket search:
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Ticket?Queue=Support&StateType=open&Limit=50&UserLogin=zabbix.integration&Password=SECRET" | jq .
+```
+
+Ticket search without filters:
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Ticket?UserLogin=zabbix.integration&Password=SECRET" | jq .
+```
+
+Expected response contains an empty `Tickets` array and the warning `At least one search filter is required.`
+
+Create an internal note:
+
+```bash
+curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketArticle?UserLogin=zabbix.integration&Password=SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":123,"Kind":"internal_note","Subject":"Integration note","Body":"Internal diagnostic note."}' | jq .
+```
+
+Create a public reply:
+
+```bash
+curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketArticle?UserLogin=zabbix.integration&Password=SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":123,"Kind":"reply","Subject":"Update from integration","Body":"Customer-visible update."}' | jq .
+```
+
+Close a ticket:
+
+```bash
+curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketClose?UserLogin=zabbix.integration&Password=SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":123,"Reason":"Issue resolved by external workflow."}' | jq .
+```
+
+Reopen a ticket:
+
+```bash
+curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketReopen?UserLogin=zabbix.integration&Password=SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":123,"Reason":"Issue reproduced after closure."}' | jq .
+```
+
+Write disabled negative test:
+
+```bash
+curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketClose?UserLogin=zabbix.integration&Password=SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":123,"Reason":"Write flag disabled test."}' | jq .
+```
+
+Expected response contains package error code `ZnunyAgentList.WriteForbidden` when `ZnunyAgentList::EnableTicketWriteOperations` is `0`.
+
+Wrong write group negative test:
+
+```bash
+curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketReopen?UserLogin=read.only.integration&Password=SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":123,"Reason":"Wrong group test."}' | jq .
+```
+
+Expected response contains package error code `ZnunyAgentList.WriteForbidden` when the authenticated agent is not in `ZnunyAgentList::AllowedWriteGroups`.
 
 Znuny GenericInterface may return HTTP 200 even for application-level authentication or authorization errors. Integrations must inspect the JSON body for `Success` or `Error`, not only the HTTP status code.
 
@@ -427,6 +519,9 @@ Wildcard-only `CustomerUser::Search` rejection:
     "CustomerUserSearch": true,
     "TicketGet": true,
     "TicketSearch": true,
+    "TicketArticleCreate": true,
+    "TicketClose": true,
+    "TicketReopen": true,
     "ValidateTicketCreate": true
   },
   "Znuny": {
@@ -626,7 +721,7 @@ On the real Znuny 6.5.20 server, validate:
 - customer search rejects wildcard-only values;
 - response payloads contain only explicit allow-listed fields;
 - `ValidateTicketCreate` returns validation results without creating tickets;
-- no operation writes data.
+- write operations require `ZnunyAgentList::EnableTicketWriteOperations = 1` and membership in `ZnunyAgentList::AllowedWriteGroups`.
 
 ## Upgrade Checklist
 
