@@ -1,5 +1,23 @@
 # ZnunyAgentList Changelog
 
+## 1.2.0 - Unreleased
+
+### Added
+
+- Added safe `Ticket::Get` operation.
+- Added safe `Ticket::Search` operation with enforced default and maximum limits.
+- Added write-control SysConfig settings for future controlled write operations.
+
+### Changed
+
+- Enhanced `Ticket::StateList` with state type information.
+- Updated documentation and verification checks for stage 1.
+
+### Validation
+
+- Server build, package installation, Web Service YAML import, operation discovery, REST validation, upgrade, and uninstall validation are still pending.
+- The Web Service YAML route update is deferred to stage 2.
+
 ## 1.1.0 - 2026-06-15
 
 ### Added

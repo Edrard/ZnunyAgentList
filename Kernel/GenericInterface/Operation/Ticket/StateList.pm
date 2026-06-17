@@ -30,10 +30,18 @@ sub Run {
     my @TicketStates;
 
     for my $ID ( sort { $a <=> $b } keys %StateList ) {
+        my $StateTypeData = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->StateTypeData(
+            StateID => $ID,
+        ) || {};
+
         push @TicketStates, {
-            ID      => 0 + $ID,
-            Name    => $StateList{$ID} || q{},
-            ValidID => 1,
+            ID          => 0 + $ID,
+            StateID     => 0 + $ID,
+            Name        => $StateList{$ID} || q{},
+            State       => $StateList{$ID} || q{},
+            StateTypeID => 0 + ( $StateTypeData->{StateTypeID} || 0 ),
+            StateType   => $StateTypeData->{StateType} || q{},
+            ValidID     => 1,
         };
     }
 

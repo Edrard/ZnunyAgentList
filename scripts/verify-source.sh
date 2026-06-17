@@ -66,8 +66,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.1.0' ]; then
-        pass 'SOPM version is 1.1.0'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.0' ]; then
+        pass 'SOPM version is 1.2.0'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -120,7 +120,23 @@ else
         fail 'Old System::Config or System::Health registration is still present'
     fi
 
+    for SettingName in \
+        'ZnunyAgentList::AllowedWriteGroups' \
+        'ZnunyAgentList::EnableTicketWriteOperations' \
+        'ZnunyAgentList::ReopenState' \
+        'ZnunyAgentList::CloseState'
+    do
+        SettingCount=$(xmllint --xpath "count(/otrs_config/Setting[@Name='$SettingName'])" "$CONFIG_XML" 2>/dev/null)
+        if [ "$SettingCount" = '1' ]; then
+            pass "SysConfig setting exists: $SettingName"
+        else
+            fail "SysConfig setting missing or duplicated: $SettingName"
+        fi
+    done
+
     for OperationName in \
+        'GenericInterface::Operation::Module###Ticket::Get' \
+        'GenericInterface::Operation::Module###Ticket::Search' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Config' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Health'
     do
@@ -131,6 +147,20 @@ else
             fail "Operation registration missing or duplicated: $OperationName"
         fi
     done
+
+    FUTURE_WRITE_REGISTRATION_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='GenericInterface::Operation::Module###Ticket::ArticleCreate' or @Name='GenericInterface::Operation::Module###Ticket::Reopen' or @Name='GenericInterface::Operation::Module###Ticket::Close'])" "$CONFIG_XML" 2>/dev/null)
+    if [ "$FUTURE_WRITE_REGISTRATION_COUNT" = '0' ]; then
+        pass 'Stage 2 write operation registrations are absent'
+    else
+        fail 'Stage 2 write operation registration is present'
+    fi
+
+    TICKET_UPDATE_REGISTRATION_COUNT=$(xmllint --xpath "count(/otrs_config/Setting[@Name='GenericInterface::Operation::Module###Ticket::TicketUpdate' or @Name='GenericInterface::Operation::Module###TicketUpdate'])" "$CONFIG_XML" 2>/dev/null)
+    if [ "$TICKET_UPDATE_REGISTRATION_COUNT" = '0' ]; then
+        pass 'Generic unrestricted TicketUpdate operation is not registered'
+    else
+        fail 'Generic unrestricted TicketUpdate operation is registered'
+    fi
 
     mapfile -t SOPM_LOCATIONS < <(xmllint --xpath '/otrs_package/Filelist/File/@Location' "$SOPM" 2>/dev/null | sed -E 's/ Location="/\n/g; s/"//g' | sed '/^$/d' | sort)
 
@@ -229,6 +259,13 @@ if [ -f "$WEBSERVICE_YAML" ]; then
     fi
 else
     fail 'Web Service template is missing'
+fi
+
+if grep -Fq 'SearchLimit(' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Search.pm" \
+    && grep -Fq 'return $Class->Limit( $Value, 50, 100 );' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Ticket::Search enforces default limit 50 and max limit 100'
+else
+    fail 'Ticket::Search default/max limit enforcement was not found'
 fi
 
 while IFS= read -r OperationFile; do

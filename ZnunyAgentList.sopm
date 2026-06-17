@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <otrs_package version="1.1">
     <Name>ZnunyAgentList</Name>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Framework>6.5.x</Framework>
     <Vendor>Vamark</Vendor>
     <URL>https://github.com/vamark/ZnunyAgentList</URL>
@@ -15,6 +15,8 @@
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Queue/Get.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Search.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Get.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Get.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Search.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/ResolveTicketDefaults.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/StateList.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/PriorityList.pm" />
