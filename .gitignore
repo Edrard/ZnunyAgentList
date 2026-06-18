@@ -21,3 +21,4 @@ Desktop.ini
 
 # Local logs
 *.log
+scripts/test-advanced-znuny-agentlist-all.env
