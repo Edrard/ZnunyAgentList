@@ -261,7 +261,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/Queue/:QueueID' \
         '/QueueByName/:Name' \
         '/CustomerUser' \
-        '/CustomerUser/:UserLogin' \
+        '/CustomerUser/:CustomerUserLogin' \
         '/ZnunyAgentListTicketSearch' \
         '/ZnunyAgentListTicket/:TicketID' \
         '/ZnunyAgentListTicketNumber/:TicketNumber' \
