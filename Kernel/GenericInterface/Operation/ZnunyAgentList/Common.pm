@@ -6,7 +6,7 @@ use warnings;
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.2.1';
+use constant PACKAGE_VERSION => '1.2.2';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -517,13 +517,11 @@ sub StateData {
     my %StateData = eval { $StateObject->StateGet( ID => $StateID ) };
     return if $@ || !$StateData{ID};
 
-    my $StateTypeData = $Class->StateTypeData( StateID => $StateData{ID} ) || {};
-
     return {
         StateID     => 0 + $StateData{ID},
-        State       => $StateData{Name} || $State,
-        StateTypeID => 0 + ( $StateTypeData->{StateTypeID} || 0 ),
-        StateType   => $StateTypeData->{StateType} || q{},
+        State       => $StateData{Name} // q{},
+        StateTypeID => 0 + ( $StateData{TypeID} || 0 ),
+        StateType   => $StateData{TypeName} // q{},
     };
 }
 

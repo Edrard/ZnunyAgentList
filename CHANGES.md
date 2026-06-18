@@ -1,5 +1,15 @@
 # ZnunyAgentList Changelog
 
+## 1.2.2 - Unreleased
+
+### Fixed
+
+- Normalized configured close/reopen state type data directly from Znuny `StateGet()` fields `TypeID` and `TypeName`.
+
+### Validation
+
+- Package build, upgrade, Web Service validation, REST lifecycle validation, and uninstall validation are still pending.
+
 ## 1.2.1 - Unreleased
 
 ### Fixed
