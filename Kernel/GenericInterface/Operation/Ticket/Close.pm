@@ -35,14 +35,17 @@ sub Run {
         Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Reason' ),
         4000,
     );
-    my $State = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'State' ),
-        100,
-    ) || Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ConfigString(
-        'ZnunyAgentList::CloseState',
-        'closed successful',
-        100,
-    );
+    my $RawState = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'State' );
+    my $State    = defined $RawState
+        ? Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString( $RawState, 100 )
+        : q{};
+    if ( $State eq q{} ) {
+        $State = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ConfigString(
+            'ZnunyAgentList::CloseState',
+            'closed successful',
+            100,
+        );
+    }
     my $Kind = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
         Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Kind' ),
         32,
