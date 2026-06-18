@@ -8,7 +8,7 @@ DEFAULT_PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 OUTPUT_DIR=${2:-/tmp}
 PACKAGE_NAME=ZnunyAgentList
-PACKAGE_VERSION=1.2.3
+PACKAGE_VERSION=1.2.4
 
 printf 'ZnunyAgentList package build helper\n'
 printf 'This helper verifies source and builds an .opm only. It does not install,\n'

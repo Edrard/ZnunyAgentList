@@ -29,8 +29,26 @@ sub Run {
     );
     my $HasFilter = 0;
 
+    my $RawQueueID        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' );
+    my $RawQueue          = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Queue' );
+    my $RawStateID        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'StateID' );
+    my $RawState          = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'State' );
+    my $RawStateType      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'StateType' );
+    my $RawOwnerID        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' );
+    my $RawOwner          = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Owner' );
+    my $RawCustomerUser   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUser' );
+    my $RawCustomerUserID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUserID' );
+    my $RawTicketNumber   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketNumber' );
+    my $RawTitle          = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Title' );
+    my $RawSearch         = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Search' );
+    my $RawLimit          = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Limit' );
+    my $RawOffset         = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Offset' );
+    my $RawPage           = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Page' );
+    my $RawSortBy         = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'SortBy' );
+    my $RawSortDirection  = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'SortDirection' );
+
     my $QueueID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' ),
+        $RawQueueID,
     );
     if ($QueueID) {
         $SearchParam{QueueIDs} = [$QueueID];
@@ -38,7 +56,7 @@ sub Run {
     }
 
     my $Queue = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Queue' ),
+        $RawQueue,
         255,
     );
     if ($Queue) {
@@ -47,7 +65,7 @@ sub Run {
     }
 
     my $StateID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'StateID' ),
+        $RawStateID,
     );
     if ($StateID) {
         $SearchParam{StateIDs} = [$StateID];
@@ -55,7 +73,7 @@ sub Run {
     }
 
     my $State = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'State' ),
+        $RawState,
         100,
     );
     if ($State) {
@@ -64,7 +82,7 @@ sub Run {
     }
 
     my $StateType = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'StateType' ),
+        $RawStateType,
         100,
     );
     if ($StateType) {
@@ -73,7 +91,7 @@ sub Run {
     }
 
     my $OwnerID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' ),
+        $RawOwnerID,
     );
     if ($OwnerID) {
         $SearchParam{OwnerIDs} = [$OwnerID];
@@ -81,7 +99,7 @@ sub Run {
     }
 
     my $Owner = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Owner' ),
+        $RawOwner,
         100,
     );
     if ($Owner) {
@@ -90,11 +108,11 @@ sub Run {
     }
 
     my $CustomerUser = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUser' ),
+        $RawCustomerUser,
         255,
     );
     my $CustomerUserID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUserID' ),
+        $RawCustomerUserID,
         255,
     );
     my $CustomerUserLogin = $CustomerUser || $CustomerUserID;
@@ -104,7 +122,7 @@ sub Run {
     }
 
     my $TicketNumber = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketNumber' ),
+        $RawTicketNumber,
         64,
     );
     if ($TicketNumber) {
@@ -113,7 +131,7 @@ sub Run {
     }
 
     my $Title = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Title' ),
+        $RawTitle,
         255,
     );
     if ($Title) {
@@ -122,7 +140,7 @@ sub Run {
     }
 
     my $Search = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Search' ),
+        $RawSearch,
         255,
     );
     if ($Search) {
@@ -143,25 +161,26 @@ sub Run {
         )
     {
         my ( $InputName, $SearchName ) = @{$DateFilter};
+        my $RawDate = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, $InputName );
         my $Date = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeDate(
-            Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, $InputName ),
+            $RawDate,
         );
 
         if ($Date) {
             $SearchParam{$SearchName} = $Date;
             $HasFilter = 1;
         }
-        elsif ( defined Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, $InputName ) ) {
+        elsif ( defined $RawDate ) {
             push @Warnings, "$InputName must use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.";
         }
     }
 
     my $Limit = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SearchLimit(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Limit' ),
+        $RawLimit,
     );
     my $Offset = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SearchOffset(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Offset' ),
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Page' ),
+        $RawOffset,
+        $RawPage,
         $Limit,
     );
     if ( $Offset > 1000 ) {
@@ -169,10 +188,10 @@ sub Run {
         push @Warnings, 'Offset is capped at 1000.';
     }
     my $SortBy = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SortBy(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'SortBy' ),
+        $RawSortBy,
     );
     my $SortDirection = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SortDirection(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'SortDirection' ),
+        $RawSortDirection,
     );
 
     if ( !$HasFilter ) {

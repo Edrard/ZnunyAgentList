@@ -1,5 +1,15 @@
 # ZnunyAgentList Changelog
 
+## 1.2.4 - Unreleased
+
+### Fixed
+
+- Fixed safe ticket search optional filter handling so missing parameters do not become length values and unrestricted no-filter searches are rejected.
+
+### Validation
+
+- Package build, upgrade, Web Service validation, REST lifecycle validation, and uninstall validation are still pending.
+
 ## 1.2.3 - Unreleased
 
 ### Fixed
