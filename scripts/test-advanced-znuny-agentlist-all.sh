@@ -15,6 +15,7 @@ CONFIG_VARS=(
     TEST_QUEUE_ID
     TEST_QUEUE_DISPLAY_NAME
     TEST_QUEUE_NAME_PATH
+    TEST_PRIORITY_NAME
     TEST_CUSTOMER_SEARCH
     TEST_CUSTOMER_LOGIN
     TEST_HOSTNAME
@@ -222,6 +223,7 @@ write_env_file() {
         printf 'TEST_QUEUE_ID=%s\n' "$(shell_quote "$TEST_QUEUE_ID")"
         printf 'TEST_QUEUE_DISPLAY_NAME=%s\n' "$(shell_quote "$TEST_QUEUE_DISPLAY_NAME")"
         printf 'TEST_QUEUE_NAME_PATH=%s\n' "$(shell_quote "$TEST_QUEUE_NAME_PATH")"
+        printf 'TEST_PRIORITY_NAME=%s\n' "$(shell_quote "$TEST_PRIORITY_NAME")"
         printf '\n'
         printf 'TEST_CUSTOMER_SEARCH=%s\n' "$(shell_quote "$TEST_CUSTOMER_SEARCH")"
         printf 'TEST_CUSTOMER_LOGIN=%s\n' "$(shell_quote "$TEST_CUSTOMER_LOGIN")"
@@ -259,6 +261,7 @@ collect_config() {
         TEST_QUEUE_NAME_PATH=$(urlencode_spaces_only "$TEST_QUEUE_DISPLAY_NAME")
     fi
     prompt_required TEST_QUEUE_NAME_PATH 'Test queue path name'
+    prompt_required TEST_PRIORITY_NAME 'Test priority name'
     prompt_required TEST_CUSTOMER_SEARCH 'Customer search string'
     prompt_required TEST_CUSTOMER_LOGIN 'Customer login'
     prompt_required TEST_HOSTNAME 'Test hostname'
@@ -541,10 +544,12 @@ test_dictionaries() {
     request GET /TicketPriority 200 "" yes no
     if printf '%s' "$LAST_BODY" | grep -Fq 'TicketPriorities'; then
         pass 'TicketPriority response contains TicketPriorities.'
+    elif [ -n "${TEST_PRIORITY_NAME:-}" ] && printf '%s' "$LAST_BODY" | grep -Fq "$TEST_PRIORITY_NAME"; then
+        pass 'TicketPriority response contains configured priority name.'
     elif [ -n "${TEST_PRIORITY_MARKER:-}" ] && printf '%s' "$LAST_BODY" | grep -Fq "$TEST_PRIORITY_MARKER"; then
         pass 'TicketPriority response contains configured priority marker.'
     else
-        fail 'TicketPriority response contains TicketPriorities or configured priority marker.'
+        fail 'TicketPriority response contains TicketPriorities, configured priority name, or configured priority marker.'
     fi
     request GET /TicketType 200 "" yes no
     request GET /Service 200 "" yes no
@@ -565,7 +570,14 @@ test_defaults_validation() {
     expect_body_not_regex '"QueueName"[[:space:]]*:[[:space:]]*"255"' 'ResolveTicketDefaults alternate HostName does not return QueueName 255.'
     expect_body_not_regex '"CustomerUserLogin"[[:space:]]*:[[:space:]]*"255Clients"' 'ResolveTicketDefaults alternate HostName does not return CustomerUserLogin 255Clients.'
 
-    request POST /ValidateTicketCreate 200 '{}' yes no
+    local validate_body
+    validate_body="{\"Queue\":\"$(json_escape "$TEST_QUEUE_DISPLAY_NAME")\",\"CustomerUser\":\"$(json_escape "$TEST_CUSTOMER_LOGIN")\",\"Title\":\"ZnunyAgentList smoke validation\",\"State\":\"new\",\"Priority\":\"$(json_escape "$TEST_PRIORITY_NAME")\""
+    if [ -n "${TEST_OWNER_ID:-}" ]; then
+        validate_body="$validate_body,\"OwnerID\":\"$(json_escape "$TEST_OWNER_ID")\""
+    fi
+    validate_body="$validate_body}"
+
+    request POST /ValidateTicketCreate 200 "$validate_body" yes no
 }
 
 test_safe_tickets() {
@@ -604,8 +616,8 @@ test_write_lifecycle() {
 
     local article_body close_body reopen_body
     article_body="{\"TicketID\":\"$(json_escape "$TEST_TICKET_ID")\",\"Kind\":\"internal_note\",\"Subject\":\"ZnunyAgentList smoke test article\",\"Body\":\"Repository smoke test internal note.\"}"
-    close_body="{\"TicketID\":\"$(json_escape "$TEST_TICKET_ID")\",\"Kind\":\"internal_note\",\"Subject\":\"ZnunyAgentList smoke test close\",\"Body\":\"Repository smoke test closing ticket.\"}"
-    reopen_body="{\"TicketID\":\"$(json_escape "$TEST_TICKET_ID")\",\"Kind\":\"internal_note\",\"Subject\":\"ZnunyAgentList smoke test reopen\",\"Body\":\"Repository smoke test reopening ticket.\"}"
+    close_body="{\"TicketID\":\"$(json_escape "$TEST_TICKET_ID")\",\"Kind\":\"internal_note\",\"Subject\":\"ZnunyAgentList smoke test close\",\"Body\":\"Repository smoke test closing ticket.\",\"Reason\":\"ZnunyAgentList smoke test close\"}"
+    reopen_body="{\"TicketID\":\"$(json_escape "$TEST_TICKET_ID")\",\"Kind\":\"internal_note\",\"Subject\":\"ZnunyAgentList smoke test reopen\",\"Body\":\"Repository smoke test reopening ticket.\",\"Reason\":\"ZnunyAgentList smoke test reopen\"}"
 
     request POST /TicketArticle 200 "$article_body" yes no
     request POST /TicketClose 200 "$close_body" yes no
