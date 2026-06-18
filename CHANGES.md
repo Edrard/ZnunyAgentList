@@ -1,5 +1,15 @@
 # ZnunyAgentList Changelog
 
+## 1.2.3 - Unreleased
+
+### Fixed
+
+- Fixed controlled `Ticket::Close` and `Ticket::Reopen` fallback to configured lifecycle states when request `State` is omitted.
+
+### Validation
+
+- Package build, upgrade, Web Service validation, REST lifecycle validation, and uninstall validation are still pending.
+
 ## 1.2.2 - Unreleased
 
 ### Fixed
