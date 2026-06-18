@@ -24,23 +24,29 @@ sub Run {
     my @Errors;
     my @Warnings;
 
+    my $RawOwnerID      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' );
+    my $RawQueue        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Queue' );
+    my $RawCustomerUser = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUser' );
+    my $RawState        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'State' );
+    my $RawLock         = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Lock' );
+
     my $OwnerID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' ),
+        $RawOwnerID,
     );
     my $Queue = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Queue' ),
+        $RawQueue,
         255,
     );
     my $CustomerUser = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUser' ),
+        $RawCustomerUser,
         255,
     );
     my $State = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'State' ),
+        $RawState,
         100,
     );
     my $Lock = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Lock' ),
+        $RawLock,
         100,
     );
 
