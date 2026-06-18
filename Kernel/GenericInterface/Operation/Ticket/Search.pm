@@ -195,13 +195,34 @@ sub Run {
     );
 
     if ( !$HasFilter ) {
-        push @Warnings, 'At least one search filter is required.';
+        my @NoFilterWarnings = ( @Warnings, 'At least one search filter is required.' );
 
         return {
             Success => 1,
             Data    => {
                 Tickets       => [],
                 Count         => 0,
+                Limit         => $Limit,
+                Offset        => 0,
+                SortBy        => $SortBy,
+                SortDirection => $SortDirection,
+                Warnings      => \@NoFilterWarnings,
+            },
+        };
+    }
+
+    if ($TicketNumber) {
+        my $Ticket = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketLookup(
+            TicketNumber => $TicketNumber,
+            UserID       => $UserID,
+        );
+        my @Tickets = $Ticket ? ($Ticket) : ();
+
+        return {
+            Success => 1,
+            Data    => {
+                Tickets       => \@Tickets,
+                Count         => 0 + scalar @Tickets,
                 Limit         => $Limit,
                 Offset        => 0,
                 SortBy        => $SortBy,

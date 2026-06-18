@@ -1,5 +1,10 @@
 # ZnunyAgentList Changelog
 
+## 1.2.5 - Unreleased
+
+- Fix safe ticket search no-filter response to include the expected warning.
+- Fix exact TicketNumber handling in safe ticket search by using the existing safe ticket lookup path.
+
 ## 1.2.4 - Unreleased
 
 ### Fixed
