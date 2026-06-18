@@ -215,6 +215,13 @@ if [ -f "$WEBSERVICE_YAML" ]; then
     fi
 
     for OperationType in \
+        'Session::SessionCreate' \
+        'Session::SessionGet' \
+        'Ticket::TicketCreate' \
+        'Ticket::TicketGet' \
+        'Ticket::TicketSearch' \
+        'Ticket::TicketHistoryGet' \
+        'Ticket::TicketUpdate' \
         'User::AgentList' \
         'Queue::List' \
         'Queue::Get' \
@@ -243,15 +250,21 @@ if [ -f "$WEBSERVICE_YAML" ]; then
     done
 
     for Route in \
+        '/Session' \
+        '/Session/:SessionID' \
+        '/Ticket' \
+        '/Ticket/:TicketID' \
+        '/TicketList' \
+        '/TicketHistory/:TicketID' \
         '/Agent' \
         '/Queue' \
         '/Queue/:QueueID' \
         '/QueueByName/:Name' \
         '/CustomerUser' \
         '/CustomerUser/:UserLogin' \
-        '/Ticket' \
-        '/Ticket/:TicketID' \
-        '/TicketNumber/:TicketNumber' \
+        '/ZnunyAgentListTicketSearch' \
+        '/ZnunyAgentListTicket/:TicketID' \
+        '/ZnunyAgentListTicketNumber/:TicketNumber' \
         '/TicketArticle' \
         '/TicketClose' \
         '/TicketReopen' \
@@ -279,10 +292,11 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         fail 'Web Service template contains possible secret values'
     fi
 
-    if grep -E '(^[[:space:]]*TicketUpdate:|Type:[[:space:]]*(Ticket::TicketUpdate|TicketUpdate)\b|Route:.*TicketUpdate)' "$WEBSERVICE_YAML" >/dev/null 2>&1; then
-        fail 'Web Service template exposes generic TicketUpdate'
+    if grep -Fq 'Type: Ticket::TicketUpdate' "$WEBSERVICE_YAML"; then
+        printf 'WARNING: Web Service template includes standard Ticket::TicketUpdate for GenericTicketConnector compatibility.\n'
+        pass 'Generic TicketUpdate is confined to the repository-only Web Service template'
     else
-        pass 'Web Service template does not expose generic TicketUpdate'
+        fail 'Web Service template is missing GenericTicketConnector Ticket::TicketUpdate compatibility operation'
     fi
 else
     fail 'Web Service template is missing'
@@ -366,6 +380,20 @@ if [ -n "$ZZZ_REFERENCE" ]; then
     fail "$AUTO_CONFIG_FILE reference found in runtime package files"
 else
     pass "No $AUTO_CONFIG_FILE references found in runtime package files"
+fi
+
+RUNTIME_TICKET_UPDATE_FILE=$(find "$ROOT/Kernel" -path "$ROOT/.git" -prune -o -type f -path '*/TicketUpdate.pm' -print -quit)
+if [ -n "$RUNTIME_TICKET_UPDATE_FILE" ]; then
+    fail 'Generic TicketUpdate runtime module is present in package source'
+else
+    pass 'No generic TicketUpdate runtime module found'
+fi
+
+SOPM_TICKET_UPDATE=$(grep -n -E 'TicketUpdate\.pm|GenericInterface/Operation/Ticket/TicketUpdate' "$SOPM" || true)
+if [ -n "$SOPM_TICKET_UPDATE" ]; then
+    fail 'SOPM includes a generic TicketUpdate runtime wrapper'
+else
+    pass 'SOPM does not include a generic TicketUpdate runtime wrapper'
 fi
 
 SQL_OR_MIGRATION=$(find "$ROOT" -path "$ROOT/.git" -prune -o \( -name '*.sql' -o -iname 'sql' -o -iname 'database' -o -iname 'migration' -o -iname 'migrations' \) -print -quit)

@@ -23,7 +23,7 @@ The package name remains `ZnunyAgentList` and the package version is `1.2.0`.
 - Does not modify queues, users, customer users, services, SLAs, states, priorities, types, preferences, config, groups, roles, or database rows.
 - Does not modify arbitrary ticket fields.
 - Does not call `TicketCreate`.
-- Does not register generic unrestricted `TicketUpdate` as a package operation.
+- Does not register generic unrestricted `TicketUpdate` as a package runtime operation.
 - Does not use raw SQL.
 - Does not add database migrations.
 - Does not modify Znuny core files.
@@ -117,9 +117,9 @@ The package does not create or modify groups, users, roles, or permissions.
 | `/Queue?Name=...` | GET | `Queue::Get` | Lookup queue by name | Agent auth plus allowed group |
 | `/CustomerUser?Search=...` | GET | `CustomerUser::Search` | Search valid customer users | Search is hardened and capped |
 | `/CustomerUser/{UserLogin}` | GET | `CustomerUser::Get` | Lookup customer user by login | Explicit allow-list only |
-| `/Ticket/{TicketID}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketID` | Explicit allow-list only |
-| `/TicketNumber/{TicketNumber}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketNumber` | Explicit allow-list only |
-| `/Ticket?...` | GET | `Ticket::Search` | Safe filtered ticket search | Requires at least one filter and capped result limits |
+| `/ZnunyAgentListTicket/{TicketID}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketID` | Explicit allow-list only |
+| `/ZnunyAgentListTicketNumber/{TicketNumber}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketNumber` | Explicit allow-list only |
+| `/ZnunyAgentListTicketSearch?...` | GET | `Ticket::Search` | Safe filtered ticket search | Requires at least one filter and capped result limits |
 | `/TicketArticle` | POST | `Ticket::ArticleCreate` | Add controlled reply or internal note | Requires write flag plus write group |
 | `/TicketClose` | POST | `Ticket::Close` | Close ticket with required reason | Requires closed target state and write group |
 | `/TicketReopen` | POST | `Ticket::Reopen` | Reopen closed ticket with required reason | Requires non-closed target state and write group |
@@ -137,9 +137,9 @@ The package does not create or modify groups, users, roles, or permissions.
 
 The package registers operations only. REST routes are mapped manually in Znuny Admin > Web Services.
 
-Use the operation names from the table above when adding operations to the intended GenericInterface web service. The suggested routes are examples and can be adjusted to local naming standards.
+Use the operation names from the table above when adding package-specific operations to the intended GenericInterface web service. The suggested routes are examples and can be adjusted to local naming standards.
 
-The repository Web Service template includes the recommended `1.2.0` read/search/write ticket routes. Import and verify the template manually; it is not installed by the package.
+The repository Web Service template includes the recommended `1.2.0` package-specific routes and standard Znuny GenericTicketConnector compatibility routes. Import and verify the template manually; it is not installed by the package.
 
 ## Optional Web Service Import Template
 
@@ -150,6 +150,13 @@ examples/webservices/AdvancedZnunyAgentListREST.yml
 ```
 
 This YAML is a helper template only. It is not automatically installed by the `.opm` package and is not listed in `ZnunyAgentList.sopm`.
+
+The template contains two operation categories:
+
+- Standard Znuny GenericTicketConnector compatibility operations: `SessionCreate`, `SessionGet`, `TicketCreate`, `TicketGet`, `TicketGetList`, `TicketHistoryGet`, `TicketSearch`, and `TicketUpdate`.
+- ZnunyAgentList package-specific safe and controlled operations: `AgentList`, `QueueList`, `QueueGet`, `CustomerUserSearch`, `CustomerUserGet`, `ResolveTicketDefaults`, ticket dictionary list operations, `ValidateTicketCreate`, safe `Ticket::Get` and `Ticket::Search`, `Ticket::ArticleCreate`, `Ticket::Close`, `Ticket::Reopen`, `ZnunyAgentList::Config`, and `ZnunyAgentList::Health`.
+
+`ZnunyAgentList` does not implement or register generic unrestricted `TicketUpdate` as a package runtime module. The optional Web Service template includes standard `Ticket::TicketUpdate` only for compatibility with existing GenericTicketConnectorREST clients. Administrators may remove or disable that standard operation in the imported Web Service if they want a strictly controlled integration surface.
 
 Import it manually after installing `ZnunyAgentList`:
 
@@ -176,6 +183,20 @@ Smoke test `Health`:
 ```bash
 curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Health?UserLogin=zabbix.integration&Password=SECRET" | jq .
 ```
+
+Existing GenericTicketConnectorREST-style clients may continue to use SessionID-based authentication through the compatibility session routes:
+
+```bash
+curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Session" \
+  -H "Content-Type: application/json" \
+  -d '{"UserLogin":"zabbix.integration","Password":"SECRET"}' | jq .
+```
+
+```bash
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Health?SessionID=SESSION_ID_PLACEHOLDER" | jq .
+```
+
+Smoke tests may also pass `UserLogin` and `Password` directly as shown below. That does not remove `SessionID` support from the Web Service.
 
 Expected success:
 
@@ -218,25 +239,25 @@ Expected response contains a `Queues` array.
 Ticket get by `TicketID`:
 
 ```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Ticket/123?UserLogin=zabbix.integration&Password=SECRET" | jq .
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicket/123?UserLogin=zabbix.integration&Password=SECRET" | jq .
 ```
 
 Ticket get by `TicketNumber`:
 
 ```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketNumber/2026061710000012?UserLogin=zabbix.integration&Password=SECRET" | jq .
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicketNumber/2026061710000012?UserLogin=zabbix.integration&Password=SECRET" | jq .
 ```
 
 Ticket search:
 
 ```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Ticket?Queue=Support&StateType=open&Limit=50&UserLogin=zabbix.integration&Password=SECRET" | jq .
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicketSearch?Queue=Support&StateType=open&Limit=50&UserLogin=zabbix.integration&Password=SECRET" | jq .
 ```
 
 Ticket search without filters:
 
 ```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Ticket?UserLogin=zabbix.integration&Password=SECRET" | jq .
+curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicketSearch?UserLogin=zabbix.integration&Password=SECRET" | jq .
 ```
 
 Expected response contains an empty `Tickets` array and the warning `At least one search filter is required.`
