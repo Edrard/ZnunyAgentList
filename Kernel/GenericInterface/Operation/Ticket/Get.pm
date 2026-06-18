@@ -23,11 +23,14 @@ sub Run {
 
     my @Warnings;
 
+    my $RawTicketID     = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketID' );
+    my $RawTicketNumber = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketNumber' );
+
     my $TicketID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketID' ),
+        $RawTicketID,
     );
     my $TicketNumber = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketNumber' ),
+        $RawTicketNumber,
         64,
     );
 

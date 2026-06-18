@@ -22,11 +22,14 @@ sub Run {
     }
 
     my $QueueObject = $Kernel::OM->Get('Kernel::System::Queue');
+    my $RawQueueID  = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' );
+    my $RawName     = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Name' );
+
     my $QueueID     = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' ),
+        $RawQueueID,
     );
     my $Name = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Name' ),
+        $RawName,
         255,
     );
 

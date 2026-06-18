@@ -21,8 +21,11 @@ sub Run {
         return $AuthError;
     }
 
+    my $RawHostname = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Hostname' );
+    my $RawHostName = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'HostName' );
+
     my $HostName = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'HostName' ),
+        defined $RawHostname ? $RawHostname : $RawHostName,
         255,
     );
 

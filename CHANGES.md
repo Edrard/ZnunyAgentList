@@ -1,5 +1,10 @@
 # ZnunyAgentList Changelog
 
+## 1.2.6 - Unreleased
+
+- Fix `CustomerUser::Get` route parameter conflict with GenericInterface `UserLogin` authentication.
+- Fix `ResolveTicketDefaults` optional hostname handling so missing or alternate hostname parameters no longer become `255`.
+
 ## 1.2.5 - Unreleased
 
 - Fix safe ticket search no-filter response to include the expected warning.

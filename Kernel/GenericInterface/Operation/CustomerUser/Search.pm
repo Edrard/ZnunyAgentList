@@ -21,12 +21,15 @@ sub Run {
         return $AuthError;
     }
 
+    my $RawSearch = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Search' );
+    my $RawLimit  = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Limit' );
+
     my $Search = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Search' ),
+        $RawSearch,
         100,
     );
     my $Limit = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Limit(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Limit' ),
+        $RawLimit,
         20,
         50,
     );

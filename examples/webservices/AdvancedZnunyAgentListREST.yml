@@ -280,7 +280,7 @@ Provider:
           ParserBackend: JSON
           RequestMethod:
           - GET
-          Route: /CustomerUser/:UserLogin
+          Route: /CustomerUser/:CustomerUserLogin
         ZnunyAgentListTicketSearch:
           ParserBackend: JSON
           RequestMethod:

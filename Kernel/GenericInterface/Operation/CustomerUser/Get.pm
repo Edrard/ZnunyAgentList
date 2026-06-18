@@ -21,16 +21,19 @@ sub Run {
         return $AuthError;
     }
 
-    my $UserLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
-        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'UserLogin' ),
+    my $RawCustomerUserLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUserLogin' );
+    my $RawCustomerUser      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUser' );
+
+    my $CustomerUserLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
+        defined $RawCustomerUserLogin ? $RawCustomerUserLogin : $RawCustomerUser,
         255,
     );
 
     my %UserData;
-    if ($UserLogin) {
+    if ($CustomerUserLogin) {
         my $CustomerUserObject = $Kernel::OM->Get('Kernel::System::CustomerUser');
         %UserData = $CustomerUserObject->CustomerUserDataGet(
-            User => $UserLogin,
+            User => $CustomerUserLogin,
         );
     }
 
