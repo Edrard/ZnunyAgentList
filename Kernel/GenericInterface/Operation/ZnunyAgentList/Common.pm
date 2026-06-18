@@ -509,7 +509,12 @@ sub StateData {
     my $StateObject = eval { $Kernel::OM->Get('Kernel::System::State') };
     return if !$StateObject;
 
-    my %StateData = eval { $StateObject->StateGet( Name => $State ) };
+    # Znuny 6.5 resolves configured state names reliably via StateLookup().
+    # Keep the lookup by name explicit so CloseState/ReopenState remain readable SysConfig values.
+    my $StateID = eval { $StateObject->StateLookup( State => $State ) };
+    return if $@ || !$StateID;
+
+    my %StateData = eval { $StateObject->StateGet( ID => $StateID ) };
     return if $@ || !$StateData{ID};
 
     my $StateTypeData = $Class->StateTypeData( StateID => $StateData{ID} ) || {};

@@ -176,14 +176,18 @@ sub Run {
     );
 
     if ( !$HasFilter ) {
+        push @Warnings, 'At least one search filter is required.';
+
         return {
             Success => 1,
             Data    => {
-                Tickets  => [],
-                Count    => 0,
-                Limit    => $Limit,
-                Offset   => $Offset,
-                Warnings => ['At least one search filter is required.'],
+                Tickets       => [],
+                Count         => 0,
+                Limit         => $Limit,
+                Offset        => 0,
+                SortBy        => $SortBy,
+                SortDirection => $SortDirection,
+                Warnings      => \@Warnings,
             },
         };
     }
