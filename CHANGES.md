@@ -19,6 +19,7 @@
 - Updated README with final `1.2.0` REST API documentation.
 - Updated verification checks for controlled write operations.
 - Strengthened source verification for controlled write security guardrails and corrected write setting descriptions.
+- Updated the optional `AdvancedZnunyAgentListREST` Web Service template to preserve standard GenericTicketConnector session and ticket operations for backward compatibility.
 
 ### Validation
 
