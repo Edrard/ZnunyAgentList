@@ -1,215 +1,331 @@
 # ZnunyAgentList
 
-## Purpose
+`ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
+integration systems such as Laravel, Zabbix, monitoring tools, and service
+automation jobs.
 
-`ZnunyAgentList` is a standalone Znuny 6.5 GenericInterface helper package for external integrations that need a controlled REST API for safe lookup data, ticket read/search metadata, and TicketCreate preflight validation.
+Current stable runtime version: `1.2.6`.
 
-The package name remains `ZnunyAgentList` and the package version is `1.2.0`.
+The package provides a controlled REST surface for:
 
-## What This Package Does
+- safe read/list operations;
+- safe ticket lookup and search operations;
+- validation-only ticket creation preflight checks;
+- controlled ticket lifecycle writes;
+- optional compatibility routes for standard Znuny GenericTicketConnector
+  operations in the repository Web Service template.
 
-- Registers read-only GenericInterface operations for agents, queues, customer users, tickets, ticket dictionaries, package config, and package health.
-- Provides safe `Ticket::Get` and `Ticket::Search` metadata operations with explicit response allow-lists.
-- Provides controlled `Ticket::ArticleCreate`, `Ticket::Close`, and `Ticket::Reopen` write operations that are disabled by default.
-- Provides a non-mutating `Ticket::ValidateTicketCreate` operation that checks a future TicketCreate payload without creating a ticket.
-- Uses standard GenericInterface authentication.
-- Requires an authenticated Znuny agent user.
-- Requires `ro` permission in at least one group configured in `ZnunyAgentList::AllowedGroups`.
-- Returns explicit allow-listed response fields only.
-
-## What This Package Does Not Do
-
-- Does not create tickets.
-- Does not modify queues, users, customer users, services, SLAs, states, priorities, types, preferences, config, groups, roles, or database rows.
-- Does not modify arbitrary ticket fields.
-- Does not call `TicketCreate`.
-- Does not register generic unrestricted `TicketUpdate` as a package runtime operation.
-- Does not use raw SQL.
-- Does not add database migrations.
-- Does not modify Znuny core files.
-- Does not edit `ZZZAAuto.pm`.
-- Does not create the `api_group` group automatically.
-- Does not install, upgrade, uninstall, rebuild config, clear cache, or deploy automatically.
-
-## Supported Environment
-
-- Supported platform: Znuny 6.5 LTS
-- Validation target: Znuny 6.5.20
-- Server path: `/opt/otrs`
-- Server OS: Rocky Linux 8
-- Runtime user: `otrs`
-- Local development: Windows source editing only
-
-Authoritative Perl syntax checks, package builds, package installation, operation discovery, and REST validation must happen on the real Znuny server. Windows local checks are not runtime validation.
+It is designed to expose useful integration data without exposing raw database
+access, unrestricted ticket updates, or full internal Znuny records.
 
 ## Security Model
 
-Every operation inherits from `Kernel::GenericInterface::Operation::Common` and authenticates through:
+GenericInterface authentication is always required.
 
-```perl
-my ( $UserID, $UserType ) = $Self->Auth(%Param);
-```
-
-Read operation access is allowed only when all of these are true:
+Read access is allowed only when all of these checks pass:
 
 - GenericInterface authentication succeeds.
+- The authenticated user is a Znuny agent.
 - `UserType` is `User`.
-- The authenticated agent has at least `ro` permission in one group configured in:
+- The authenticated agent belongs to at least one group configured in
+  `ZnunyAgentList::AllowedGroups`.
+- The agent has at least `ro` permission in one allowed group.
 
-```text
-ZnunyAgentList::AllowedGroups
-```
-
-The default group is:
-
-```text
-api_group
-```
-
-Authentication failures, wrong user type, missing/invalid group config, missing group permission, and group lookup failures all return the same generic error code:
+Authentication, wrong user type, missing groups, or missing permissions return a
+generic package authentication failure:
 
 ```text
 ZnunyAgentList.AuthFail
 ```
 
-`ZnunyAgentList::Health` is authenticated and group-protected. It is not a public endpoint.
-
-Version `1.2.0` includes write-control settings for controlled ticket write operations:
+The default read group is:
 
 ```text
-ZnunyAgentList::AllowedWriteGroups
-ZnunyAgentList::EnableTicketWriteOperations
-ZnunyAgentList::ReopenState
-ZnunyAgentList::CloseState
+api_group
 ```
 
-Write operations are disabled and unconfigured by default. `AllowedWriteGroups` defaults to an empty list, `EnableTicketWriteOperations` defaults to `0`, `ReopenState` defaults to `open`, and `CloseState` defaults to `closed successful`.
+Use a dedicated API agent account. Do not use normal human admin accounts for
+automation.
 
-To enable controlled write operations after installing the package:
+## Write Protection Model
 
-1. Create a dedicated write group for API agents.
-2. Add only approved API agent users to that group with `ro` permission.
-3. Set `ZnunyAgentList::AllowedWriteGroups` to that group.
-4. Set `ZnunyAgentList::EnableTicketWriteOperations` to `1`.
-5. Keep read-only integrations in `ZnunyAgentList::AllowedGroups` when they do not need writes.
+Controlled write operations are intentionally separate from read access.
 
-## Required Manual Security Setup
+Write operations are disabled by default. Importing the Web Service template does
+not enable writes.
 
-Before production use:
+Write access is allowed only when all of these checks pass:
 
-1. Create a dedicated Znuny group named `api_group`.
-2. Create a dedicated API agent user.
-3. Give that API agent `ro` permission in `api_group`.
-4. Use that API agent for GenericInterface API access.
-5. Keep `ZnunyAgentList::AllowedGroups` restricted to `api_group`.
-6. Do not use normal human admin accounts for integrations.
-7. Restrict network access to the GenericInterface web service.
+- GenericInterface authentication succeeds.
+- The authenticated user is a Znuny agent.
+- `UserType` is `User`.
+- `ZnunyAgentList::EnableTicketWriteOperations = 1`.
+- `ZnunyAgentList::AllowedWriteGroups` is configured and non-empty.
+- The authenticated agent belongs to at least one configured write group.
+- The authenticated agent has at least `ro` permission in that write group.
 
-The package does not create or modify groups, users, roles, or permissions.
+Expected write-related SysConfig keys:
 
-## Operations Overview
+```text
+ZnunyAgentList::EnableTicketWriteOperations
+ZnunyAgentList::AllowedWriteGroups
+ZnunyAgentList::CloseState
+ZnunyAgentList::ReopenState
+```
 
-| Suggested Route | HTTP Method | GenericInterface Operation | Purpose | Security Notes |
-| --- | --- | --- | --- | --- |
-| `/Agent` | GET | `User::AgentList` | List active non-out-of-office agents | Agent auth plus allowed group |
-| `/Queue` | GET | `Queue::List` | List valid queues | Agent auth plus allowed group |
-| `/Queue/{QueueID}` | GET | `Queue::Get` | Lookup queue by ID | Agent auth plus allowed group |
-| `/Queue?Name=...` | GET | `Queue::Get` | Lookup queue by name | Agent auth plus allowed group |
-| `/CustomerUser?Search=...` | GET | `CustomerUser::Search` | Search valid customer users | Search is hardened and capped |
-| `/CustomerUser/{UserLogin}` | GET | `CustomerUser::Get` | Lookup customer user by login | Explicit allow-list only |
-| `/ZnunyAgentListTicket/{TicketID}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketID` | Explicit allow-list only |
-| `/ZnunyAgentListTicketNumber/{TicketNumber}` | GET | `Ticket::Get` | Lookup ticket metadata by `TicketNumber` | Explicit allow-list only |
-| `/ZnunyAgentListTicketSearch?...` | GET | `Ticket::Search` | Safe filtered ticket search | Requires at least one filter and capped result limits |
-| `/TicketArticle` | POST | `Ticket::ArticleCreate` | Add controlled reply or internal note | Requires write flag plus write group |
-| `/TicketClose` | POST | `Ticket::Close` | Close ticket with required reason | Requires closed target state and write group |
-| `/TicketReopen` | POST | `Ticket::Reopen` | Reopen closed ticket with required reason | Requires non-closed target state and write group |
-| `/ResolveTicketDefaults?...` | GET | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | Business misses return warnings |
-| `/TicketState` | GET | `Ticket::StateList` | List valid ticket states with state type | Dictionary values only |
-| `/TicketPriority` | GET | `Ticket::PriorityList` | List valid ticket priorities | Dictionary values only |
-| `/TicketType` | GET | `Ticket::TypeList` | List valid ticket types | Empty list with warning if unavailable |
-| `/Service` | GET | `Ticket::ServiceList` | List valid services | Empty list with warning if unavailable |
-| `/SLA` | GET | `Ticket::SLAList` | List valid SLAs | Empty list with warning if unavailable |
-| `/SystemConfig` | GET | `ZnunyAgentList::Config` | Return package capabilities | No sensitive environment data |
-| `/Health` | GET | `ZnunyAgentList::Health` | Return package health status | Authenticated, not public |
-| `/ValidateTicketCreate` | POST | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data | Never creates or modifies tickets |
+Common safe configuration:
 
-## Suggested REST Route Mapping
+```text
+ZnunyAgentList::AllowedGroups = api_group
+ZnunyAgentList::EnableTicketWriteOperations = 1
+ZnunyAgentList::AllowedWriteGroups = api_group
+ZnunyAgentList::CloseState = closed successful
+ZnunyAgentList::ReopenState = open
+```
 
-The package registers operations only. REST routes are mapped manually in Znuny Admin > Web Services.
+For read-only deployments, keep:
 
-Use the operation names from the table above when adding package-specific operations to the intended GenericInterface web service. The suggested routes are examples and can be adjusted to local naming standards.
+```text
+ZnunyAgentList::EnableTicketWriteOperations = 0
+```
 
-The repository Web Service template includes the recommended `1.2.0` package-specific routes and standard Znuny GenericTicketConnector compatibility routes. Import and verify the template manually; it is not installed by the package.
+The package does not expose a generic runtime `TicketUpdate` operation.
+Controlled write operations do not accept unsafe article internals and do not let
+callers control fields such as:
 
-## Optional Web Service Import Template
+```text
+ArticleType
+SenderType
+HistoryType
+HistoryComment
+From
+To
+Cc
+Bcc
+MimeType
+Charset
+Loop
+AutoResponseType
+```
 
-The repository includes an optional Znuny GenericInterface REST import template:
+`Kind` is limited by the package to safe values such as `internal_note` and
+`reply`. `Ticket::Close` and `Ticket::Reopen` use configured safe target states
+from SysConfig; they are not arbitrary caller-controlled state updates.
+
+## What The Package Does Not Do
+
+- It does not create tickets.
+- It does not expose a custom unrestricted runtime `TicketUpdate` wrapper.
+- It does not modify queues, users, customer users, services, SLAs, states,
+  priorities, types, groups, roles, preferences, or database rows.
+- It does not use raw SQL.
+- It does not add database migrations.
+- It does not modify Znuny core files.
+- It does not edit `ZZZAAuto.pm`.
+- It does not create `api_group` automatically.
+- It does not install, upgrade, uninstall, rebuild config, clear cache, import a
+  Web Service, or deploy automatically.
+
+## Supported Environment
+
+- Znuny: `6.5.x` LTS
+- Current validation target: Znuny `6.5.20`
+- Typical Znuny home: `/opt/otrs`
+- Typical runtime user: `otrs`
+- Typical server OS: Rocky Linux 8
+- Local development: Windows source editing and Git workflow
+
+Perl syntax checks, package builds, package installation, operation discovery,
+and REST behavior must be validated on the real Znuny server.
+
+## Web Service Template
+
+The package installs GenericInterface operation modules and SysConfig
+registration. REST routes are configured in a Znuny Web Service.
+
+The repository includes an import template:
 
 ```text
 examples/webservices/AdvancedZnunyAgentListREST.yml
 ```
 
-This YAML is a helper template only. It is not automatically installed by the `.opm` package and is not listed in `ZnunyAgentList.sopm`.
+The template is not installed automatically by the `.opm` package. Import it
+manually in Znuny Admin after package installation.
 
-The template contains two operation categories:
+If routes change, the Web Service template must be re-imported or adjusted in
+Znuny Admin because Web Service configuration is stored in the Znuny database.
 
-- Standard Znuny GenericTicketConnector compatibility operations: `SessionCreate`, `SessionGet`, `TicketCreate`, `TicketGet`, `TicketGetList`, `TicketHistoryGet`, `TicketSearch`, and `TicketUpdate`.
-- ZnunyAgentList package-specific safe and controlled operations: `AgentList`, `QueueList`, `QueueGet`, `CustomerUserSearch`, `CustomerUserGet`, `ResolveTicketDefaults`, ticket dictionary list operations, `ValidateTicketCreate`, safe `Ticket::Get` and `Ticket::Search`, `Ticket::ArticleCreate`, `Ticket::Close`, `Ticket::Reopen`, `ZnunyAgentList::Config`, and `ZnunyAgentList::Health`.
+The template contains:
 
-`ZnunyAgentList` does not implement or register generic unrestricted `TicketUpdate` as a package runtime module. The optional Web Service template includes standard `Ticket::TicketUpdate` only for compatibility with existing GenericTicketConnectorREST clients. Administrators may remove or disable that standard operation in the imported Web Service if they want a strictly controlled integration surface.
+- package-specific safe and controlled `ZnunyAgentList` operations;
+- standard GenericTicketConnector compatibility routes for existing clients.
 
-Import it manually after installing `ZnunyAgentList`:
+`PATCH /Ticket/:TicketID` is a standard GenericTicketConnector compatibility
+route in the example Web Service template only. The package itself does not
+install a custom unrestricted runtime `TicketUpdate` wrapper.
 
-```text
-Admin > Web Services > Add Web Service > Import web service
-```
+## Authentication Examples
 
-The recommended imported Web Service name is:
+Use placeholders only. Do not store real credentials in this repository.
 
-```text
-AdvancedZnunyAgentListREST
-```
-
-Importing a Web Service YAML can overwrite or conflict with an existing Web Service if names are the same. After import, verify the transport, authentication, debugger settings, and route mappings in the Znuny Admin UI. Then rebuild configuration and clear cache as separate administrative steps.
-
-Example endpoint base URL:
-
-```text
-https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST
-```
-
-Smoke test `Health`:
+Session-based authentication:
 
 ```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Health?UserLogin=zabbix.integration&Password=SECRET" | jq .
-```
-
-Existing GenericTicketConnectorREST-style clients may continue to use SessionID-based authentication through the compatibility session routes:
-
-```bash
-curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Session" \
+curl -sk -X POST \
+  "https://znuny.example.invalid/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Session" \
   -H "Content-Type: application/json" \
-  -d '{"UserLogin":"zabbix.integration","Password":"SECRET"}' | jq .
+  -d '{"UserLogin":"API_USER","Password":"API_PASSWORD"}'
 ```
+
+GET request with query-string authentication:
 
 ```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Health?SessionID=SESSION_ID_PLACEHOLDER" | jq .
+curl -sk \
+  "https://znuny.example.invalid/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Health?UserLogin=API_USER&Password=API_PASSWORD"
 ```
 
-Smoke tests may also pass `UserLogin` and `Password` directly as shown below. That does not remove `SessionID` support from the Web Service.
+Query-string authentication can be useful for smoke tests, but credentials in
+URLs may be exposed through logs, browser history, or intermediary systems. Use
+session or header-based authentication when appropriate for your Web Service
+configuration.
 
-Expected success:
+## Package Operations
+
+All package operations require GenericInterface authentication and the read
+authorization checks described above unless explicitly marked as write
+operations.
+
+### Read And List Operations
+
+| Method | Route | Operation | Purpose | Important Parameters | Response Shape |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/Health` | `ZnunyAgentList::Health` | Authenticated package health | none | `Plugin`, `Version`, `Success`, `Time` |
+| `GET` | `/SystemConfig` | `ZnunyAgentList::Config` | Package capabilities/config summary | none | `Plugin`, `Version`, `Features`, `WriteProtection` |
+| `GET` | `/Agent` | `User::AgentList` | List valid active agents | none | `Agents[]` with `UserID`, `UserLogin`, `UserFullname` |
+| `GET` | `/Queue` | `Queue::List` | List valid queues | none | `Queues[]` |
+| `GET` | `/Queue/:QueueID` | `Queue::Get` | Get queue by numeric ID | `QueueID` path parameter | `Queue.Found`, queue metadata |
+| `GET` | `/QueueByName/:Name` | `Queue::Get` | Get queue by name | `Name` path parameter | `Queue.Found`, queue metadata |
+| `GET` | `/CustomerUser?Search=...&Limit=...` | `CustomerUser::Search` | Search customer users | `Search`, optional `Limit` capped at `50` | `CustomerUsers[]`, optional `Warnings[]` |
+| `GET` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Get` | Get one customer user | `CustomerUserLogin` path parameter | `CustomerUser.Found`, safe customer fields |
+| `GET` | `/TicketState` | `Ticket::StateList` | List ticket states | none | `TicketStates[]` |
+| `GET` | `/TicketPriority` | `Ticket::PriorityList` | List ticket priorities | none | `TicketPriorities[]` |
+| `GET` | `/TicketType` | `Ticket::TypeList` | List ticket types | none | `TicketTypes[]`, optional warnings |
+| `GET` | `/Service` | `Ticket::ServiceList` | List services | none | `Services[]`, optional warnings |
+| `GET` | `/SLA` | `Ticket::SLAList` | List SLAs | none | `SLAs[]`, optional warnings |
+| `GET` | `/ResolveTicketDefaults?Hostname=...` | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | `Hostname` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
+| `GET` | `/ResolveTicketDefaults?HostName=...` | `Ticket::ResolveTicketDefaults` | Same as above with alternate parameter spelling | `HostName` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
+| `POST` | `/ValidateTicketCreate` | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data without creating a ticket | `OwnerID`, `Queue`, `CustomerUser`, `State`, `Lock` as available | `Valid`, `Errors[]`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, `Ticket`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, `Ticket`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search | filters such as `TicketNumber`, `Queue`, `StateType`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | `Tickets[]`, `Count`, `Limit`, `Offset`, `Warnings[]` |
+
+`/CustomerUser/:CustomerUserLogin` intentionally uses a customer-specific path
+parameter name. This avoids conflict with the GenericInterface authentication
+parameter named `UserLogin`.
+
+`CustomerUser::Search` requires at least two meaningful non-wildcard characters
+after removing `*`, `%`, and `?` from a validation copy of the search string.
+Wildcard-only searches return an empty result with a warning.
+
+`Ticket::Search` requires at least one meaningful filter. Unfiltered searches
+return an empty `Tickets` array and the warning:
+
+```text
+At least one search filter is required.
+```
+
+Exact `TicketNumber` searches use the package safe ticket lookup path and do not
+fall through to an unrestricted broad ticket search.
+
+### Controlled Write Operations
+
+These operations require read authorization plus the additional write protection
+checks documented above.
+
+| Method | Route | Operation | Purpose | Important Parameters | Response Shape |
+| --- | --- | --- | --- | --- | --- |
+| `POST` | `/TicketArticle` | `Ticket::ArticleCreate` | Add a controlled internal note or reply | `TicketID` or `TicketNumber`, `Kind`, `Subject`, `Body` | `ArticleID`, `TicketID`, `TicketNumber`, `Warnings[]` |
+| `POST` | `/TicketClose` | `Ticket::Close` | Add a note and move ticket to configured close state | `TicketID` or `TicketNumber`, `Reason`, optional `Kind`, `Subject`, `Body` | `TicketID`, `TicketNumber`, `State`, `StateType`, `ArticleID` |
+| `POST` | `/TicketReopen` | `Ticket::Reopen` | Add a note and move ticket to configured reopen state | `TicketID` or `TicketNumber`, `Reason`, optional `Kind`, `Subject`, `Body` | `TicketID`, `TicketNumber`, `State`, `StateType`, `ArticleID` |
+
+Example `POST /TicketArticle` body:
 
 ```json
 {
-  "Plugin": "ZnunyAgentList",
-  "Success": 1,
-  "Time": "2026-06-15 16:22:07",
-  "Version": "1.2.0"
+  "TicketID": "TICKET_ID",
+  "Kind": "internal_note",
+  "Subject": "Investigation note",
+  "Body": "Checked monitoring data and added internal context."
 }
 ```
 
-Expected no-auth or wrong-password response:
+Example `POST /TicketClose` body:
+
+```json
+{
+  "TicketID": "TICKET_ID",
+  "Kind": "internal_note",
+  "Subject": "Problem resolved",
+  "Body": "Monitoring problem was resolved.",
+  "Reason": "Problem resolved from integration workflow."
+}
+```
+
+Example `POST /TicketReopen` body:
+
+```json
+{
+  "TicketID": "TICKET_ID",
+  "Kind": "internal_note",
+  "Subject": "Problem reappeared",
+  "Body": "Monitoring problem reappeared.",
+  "Reason": "Problem reappeared in monitoring."
+}
+```
+
+## GenericTicketConnector Compatibility Routes
+
+The example Web Service template includes these standard Znuny
+GenericTicketConnector compatibility routes:
+
+| Method | Route | Standard Operation | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/Session` | `Session::SessionCreate` | Creates a GenericInterface session. |
+| `GET` | `/Session` | `Session::SessionGet` | Reads session data, typically with `SessionID`. |
+| `GET` | `/Session/:SessionID` | `Session::SessionGet` | Reads session data using path parameter. |
+| `POST` | `/Ticket` | `Ticket::TicketCreate` | Standard GenericTicketConnector create route from Znuny, not a package runtime module. |
+| `GET` | `/Ticket/:TicketID` | `Ticket::TicketGet` | Standard ticket get route. |
+| `GET` | `/TicketList` | `Ticket::TicketGetList` | Standard ticket list route. |
+| `GET` | `/TicketHistory/:TicketID` | `Ticket::TicketHistoryGet` | Standard ticket history route. |
+| `GET` | `/Ticket` | `Ticket::TicketSearch` | Standard ticket search route. |
+| `PATCH` | `/Ticket/:TicketID` | `Ticket::TicketUpdate` | Standard compatibility route only; not installed by this package as a runtime wrapper. |
+
+Administrators can remove or disable compatibility operations from the imported
+Web Service if they want a strictly package-controlled surface.
+
+## Response Shapes
+
+Package operations return GenericInterface JSON responses. Successful package
+operations use:
+
+```json
+{
+  "Success": 1,
+  "Data": {}
+}
+```
+
+Business misses are not necessarily transport errors. They return `Success: 1`
+with fields such as:
+
+```json
+{
+  "Found": 0,
+  "Warnings": ["Queue not found."]
+}
+```
+
+Authentication or authorization failures return an error body similar to:
 
 ```json
 {
@@ -220,495 +336,79 @@ Expected no-auth or wrong-password response:
 }
 ```
 
-Smoke test `Agent`:
+Znuny GenericInterface can return HTTP 200 for application-level errors.
+Integrations must inspect the JSON body for `Success`, `Data`, and `Error`, not
+only the HTTP status code.
 
-```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Agent?UserLogin=zabbix.integration&Password=SECRET" | jq .
-```
-
-Expected response contains an `Agents` array.
-
-Smoke test `Queue`:
-
-```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/Queue?UserLogin=zabbix.integration&Password=SECRET" | jq .
-```
-
-Expected response contains a `Queues` array.
-
-Ticket get by `TicketID`:
-
-```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicket/123?UserLogin=zabbix.integration&Password=SECRET" | jq .
-```
-
-Ticket get by `TicketNumber`:
-
-```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicketNumber/2026061710000012?UserLogin=zabbix.integration&Password=SECRET" | jq .
-```
-
-Ticket search:
-
-```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicketSearch?Queue=Support&StateType=open&Limit=50&UserLogin=zabbix.integration&Password=SECRET" | jq .
-```
-
-Ticket search without filters:
-
-```bash
-curl -sk "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/ZnunyAgentListTicketSearch?UserLogin=zabbix.integration&Password=SECRET" | jq .
-```
-
-Expected response contains an empty `Tickets` array and the warning `At least one search filter is required.`
-
-Create an internal note:
-
-```bash
-curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketArticle?UserLogin=zabbix.integration&Password=SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"TicketID":123,"Kind":"internal_note","Subject":"Integration note","Body":"Internal diagnostic note."}' | jq .
-```
-
-Create a public reply:
-
-```bash
-curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketArticle?UserLogin=zabbix.integration&Password=SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"TicketID":123,"Kind":"reply","Subject":"Update from integration","Body":"Customer-visible update."}' | jq .
-```
-
-Close a ticket:
-
-```bash
-curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketClose?UserLogin=zabbix.integration&Password=SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"TicketID":123,"Reason":"Issue resolved by external workflow."}' | jq .
-```
-
-Reopen a ticket:
-
-```bash
-curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketReopen?UserLogin=zabbix.integration&Password=SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"TicketID":123,"Reason":"Issue reproduced after closure."}' | jq .
-```
-
-Write disabled negative test:
-
-```bash
-curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketClose?UserLogin=zabbix.integration&Password=SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"TicketID":123,"Reason":"Write flag disabled test."}' | jq .
-```
-
-Expected response contains package error code `ZnunyAgentList.WriteForbidden` when `ZnunyAgentList::EnableTicketWriteOperations` is `0`.
-
-Wrong write group negative test:
-
-```bash
-curl -sk -X POST "https://otrs.example.net/otrs/nph-genericinterface.pl/Webservice/AdvancedZnunyAgentListREST/TicketReopen?UserLogin=read.only.integration&Password=SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"TicketID":123,"Reason":"Wrong group test."}' | jq .
-```
-
-Expected response contains package error code `ZnunyAgentList.WriteForbidden` when the authenticated agent is not in `ZnunyAgentList::AllowedWriteGroups`.
-
-Znuny GenericInterface may return HTTP 200 even for application-level authentication or authorization errors. Integrations must inspect the JSON body for `Success` or `Error`, not only the HTTP status code.
-
-## Response Shapes
-
-All normal successful operations return:
-
-```perl
-{
-    Success => 1,
-    Data    => {
-        ...
-    },
-}
-```
-
-Business validation misses return `Success => 1` with `Found => 0`, `Valid => 0`, `Warnings`, or `Errors` inside `Data`. Authentication and authorization failures use the generic GenericInterface error response.
-
-`User::AgentList`:
+Safe ticket metadata is explicitly allow-listed and does not expose full ticket
+or internal Perl object data. Typical safe ticket fields include:
 
 ```json
 {
-  "Agents": [
-    {
-      "UserID": 12,
-      "UserLogin": "agent@example.invalid",
-      "UserFullname": "Example Agent"
-    }
-  ]
+  "TicketID": "TICKET_ID",
+  "TicketNumber": "TICKET_NUMBER",
+  "Title": "Example ticket",
+  "Queue": "Support",
+  "State": "open",
+  "StateType": "open",
+  "Priority": "3 normal",
+  "Created": "2026-06-18 10:00:00",
+  "Changed": "2026-06-18 10:15:00"
 }
 ```
 
-`Queue::List`:
+## Installation And Update Workflow
 
-```json
-{
-  "Queues": [
-    {
-      "QueueID": 12,
-      "Name": "Support",
-      "FullName": "Support",
-      "ValidID": 1
-    }
-  ]
-}
-```
+Use the real Znuny server for package verification, build, install, upgrade, and
+runtime validation.
 
-`Queue::Get` found:
+Users can either download the verified `.opm` package from the GitHub Release or
+build it themselves in their own Znuny/Linux environment. Do not commit generated
+`.opm` files or checksum files to Git.
 
-```json
-{
-  "Queue": {
-    "Found": true,
-    "QueueID": 12,
-    "Name": "Support",
-    "FullName": "Support",
-    "ValidID": 1
-  }
-}
-```
-
-`Queue::Get` not found:
-
-```json
-{
-  "Queue": {
-    "Found": false
-  },
-  "Warnings": [
-    "Queue not found."
-  ]
-}
-```
-
-`CustomerUser::Search`:
-
-```json
-{
-  "CustomerUsers": [
-    {
-      "UserLogin": "customer@example.invalid",
-      "UserCustomerID": "ExampleCustomer",
-      "UserFirstname": "Example",
-      "UserLastname": "Customer",
-      "UserEmail": "customer@example.invalid"
-    }
-  ]
-}
-```
-
-Wildcard-only `CustomerUser::Search` rejection:
-
-```json
-{
-  "CustomerUsers": [],
-  "Warnings": [
-    "Search must contain at least 2 non-wildcard characters."
-  ]
-}
-```
-
-`CustomerUser::Get` found:
-
-```json
-{
-  "CustomerUser": {
-    "Found": true,
-    "UserLogin": "customer@example.invalid",
-    "UserCustomerID": "ExampleCustomer",
-    "UserFirstname": "Example",
-    "UserLastname": "Customer",
-    "UserEmail": "customer@example.invalid"
-  }
-}
-```
-
-`CustomerUser::Get` not found:
-
-```json
-{
-  "CustomerUser": {
-    "Found": false
-  },
-  "Warnings": [
-    "CustomerUser not found."
-  ]
-}
-```
-
-`Ticket::ResolveTicketDefaults`:
-
-```json
-{
-  "Input": {
-    "HostName": "Support host.example.invalid"
-  },
-  "Detected": {
-    "QueueName": "Support",
-    "CustomerUserLogin": "SupportClients"
-  },
-  "Queue": {
-    "Found": true,
-    "QueueID": 12,
-    "Name": "Support",
-    "FullName": "Support"
-  },
-  "CustomerUser": {
-    "Found": true,
-    "UserLogin": "SupportClients",
-    "UserCustomerID": "Support"
-  },
-  "Warnings": []
-}
-```
-
-`Ticket::Get`:
-
-```json
-{
-  "Found": true,
-  "Ticket": {
-    "TicketID": 123,
-    "TicketNumber": "2026061710000012",
-    "Title": "Example ticket",
-    "QueueID": 12,
-    "Queue": "Support",
-    "OwnerID": 4,
-    "Owner": "agent.login",
-    "CustomerUserID": "customer.login",
-    "CustomerUser": "customer.login",
-    "StateID": 4,
-    "State": "open",
-    "StateType": "open",
-    "PriorityID": 3,
-    "Priority": "3 normal",
-    "Created": "2026-06-17 10:00:00",
-    "Changed": "2026-06-17 10:15:00"
-  },
-  "Warnings": []
-}
-```
-
-`Ticket::Search` without filters:
-
-```json
-{
-  "Tickets": [],
-  "Count": 0,
-  "Limit": 50,
-  "Offset": 0,
-  "Warnings": [
-    "At least one search filter is required."
-  ]
-}
-```
-
-`Ticket::Search` requires at least one meaningful filter. It defaults to `Limit = 50`, caps `Limit` at `100`, caps `Offset` at `1000`, accepts `Offset` or `Page`, and allow-lists `SortBy` to `TicketID`, `TicketNumber`, `Created`, `Changed`, `State`, `Priority`, `Queue`, `Owner`, or `Title`.
-
-`Ticket::StateList`:
-
-```json
-{
-  "TicketStates": [
-    {
-      "ID": 1,
-      "StateID": 1,
-      "Name": "new",
-      "State": "new",
-      "StateTypeID": 1,
-      "StateType": "new",
-      "ValidID": 1
-    }
-  ]
-}
-```
-
-`ZnunyAgentList::Config`:
-
-```json
-{
-  "Plugin": "ZnunyAgentList",
-  "Version": "1.2.0",
-  "Features": {
-    "AgentList": true,
-    "CustomerUserSearch": true,
-    "TicketGet": true,
-    "TicketSearch": true,
-    "TicketArticleCreate": true,
-    "TicketClose": true,
-    "TicketReopen": true,
-    "ValidateTicketCreate": true
-  },
-  "Znuny": {
-    "Version": "6.5.x"
-  }
-}
-```
-
-`ZnunyAgentList::Health`:
-
-```json
-{
-  "Success": true,
-  "Plugin": "ZnunyAgentList",
-  "Version": "1.2.0",
-  "Time": "2026-06-15 12:00:00"
-}
-```
-
-`Ticket::ValidateTicketCreate` valid:
-
-```json
-{
-  "Valid": true,
-  "Errors": [],
-  "Warnings": []
-}
-```
-
-`Ticket::ValidateTicketCreate` invalid:
-
-```json
-{
-  "Valid": false,
-  "Errors": [
-    "Queue not found."
-  ],
-  "Warnings": []
-}
-```
-
-## Customer User Search Safety
-
-`CustomerUser::Search` sanitizes `Search`, removes wildcard characters from a temporary validation copy, and requires at least 2 meaningful non-wildcard characters. The wildcard characters checked for this minimum are:
-
-```text
-*
-%
-?
-```
-
-Wildcard-only searches such as `**`, `%%`, `??`, or `*%` return an empty result with a warning. This reduces broad customer user enumeration risk. The actual search value is not defaulted to `*`, and `Limit` is capped at 50.
-
-## Ticket Default Resolution Rule
-
-`Ticket::ResolveTicketDefaults` uses the first whitespace-separated `HostName` token:
-
-```text
-QueueName = first HostName token
-CustomerUserLogin = QueueName + "Clients"
-```
-
-It validates the queue with `QueueGet(Name => ...)` and the customer user with `CustomerUserDataGet(User => ...)`. Missing business data returns `Found => 0` and warnings rather than GenericInterface errors.
-
-## TicketCreate Preflight Validation
-
-`Ticket::ValidateTicketCreate` validates:
-
-- `OwnerID`
-- `Queue`
-- `CustomerUser`
-- `State`
-- `Lock`
-
-It never calls `TicketCreate`, never locks or unlocks tickets, and never writes data. It is a lookup-style preflight check only.
-
-## Package Source Layout
-
-Package-owned runtime files live under:
-
-```text
-Kernel/Config/Files/XML/ZnunyAgentList.xml
-Kernel/GenericInterface/Operation/...
-```
-
-Repository-only files include docs, helper scripts, `.gitignore`, review artifacts, logs, and generated packages.
-
-## SOPM / Installed Runtime Files
-
-`ZnunyAgentList.sopm` installs only runtime files:
-
-- `Kernel/Config/Files/XML/ZnunyAgentList.xml`
-- `Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm`
-- `Kernel/GenericInterface/Operation/ZnunyAgentList/Config.pm`
-- `Kernel/GenericInterface/Operation/ZnunyAgentList/Health.pm`
-- operation modules under `Kernel/GenericInterface/Operation/User/`
-- operation modules under `Kernel/GenericInterface/Operation/Queue/`
-- operation modules under `Kernel/GenericInterface/Operation/CustomerUser/`
-- operation modules under `Kernel/GenericInterface/Operation/Ticket/`
-
-The SOPM does not install `README.md`, `CHANGES.md`, `LICENSE`, scripts, Git metadata, review files, logs, or generated `.opm` files.
-
-## Transfer To Server
-
-Transfer the source tree to a staging path on the Znuny server using one of:
+1. Clone or update the repository on the Znuny server:
 
 ```bash
 git clone <REPOSITORY_URL> /path/to/ZnunyAgentList
-scp -r /local/path/ZnunyAgentList <ssh-user>@<znuny-host>:/path/to/ZnunyAgentList
-rsync -a --exclude .git /local/path/ZnunyAgentList/ <ssh-user>@<znuny-host>:/path/to/ZnunyAgentList/
+cd /path/to/ZnunyAgentList
+git pull --ff-only
 ```
 
-Use placeholders only. Do not store credentials, tokens, or session IDs in this repository.
-
-## Server-Side Verification
-
-Run read-only source verification on Rocky Linux 8:
+2. Run read-only source verification:
 
 ```bash
-cd /path/to/ZnunyAgentList
 bash scripts/verify-source.sh
 ```
 
-Run Perl syntax checks on the real Znuny server:
+3. Build the `.opm` package on the Znuny server:
 
 ```bash
-cd /opt/otrs
-find /path/to/ZnunyAgentList/Kernel/GenericInterface/Operation -type f -name '*.pm' -print0 \
-  | xargs -0 -n1 perl -I/path/to/ZnunyAgentList -I/opt/otrs -c
-```
-
-These checks do not prove package installation, GenericInterface discovery, or REST behavior.
-
-## Package Build
-
-Build the `.opm` on the Znuny server:
-
-```bash
-cd /path/to/ZnunyAgentList
 bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 ```
 
-The helper runs `scripts/verify-source.sh` first, checks that the `otrs` user can read source/runtime files, verifies that the output directory is writable by `otrs`, and runs `Dev::Package::Build` as `otrs`.
-
-Building creates:
+This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.2.0.opm
+/path/to/output/ZnunyAgentList-1.2.6.opm
 ```
 
-Building does not install the package.
+4. Install or upgrade with the Znuny console as `otrs`.
 
-## Package Installation
-
-Installation is a later explicit administrative step:
+Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/ZnunyAgentList-1.2.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.6.opm" otrs
 ```
 
-Do not run installation from the Windows development environment.
+Upgrade:
 
-## Configuration Rebuild and Cache Cleanup
+```bash
+cd /opt/otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.6.opm" otrs
+```
 
-After package installation, rebuild config and clear cache as separate administrative steps:
+5. Rebuild configuration and delete cache:
 
 ```bash
 cd /opt/otrs
@@ -716,74 +416,119 @@ su -s /bin/bash -c "bin/otrs.Console.pl Maint::Config::Rebuild" otrs
 su -s /bin/bash -c "bin/otrs.Console.pl Maint::Cache::Delete" otrs
 ```
 
-## Web Service Route Mapping
+6. Restart the web server using the site's normal service-management process.
 
-After installation and required Znuny administration steps, manually add the operations to the intended GenericInterface web service in Znuny Admin > Web Services.
-
-Validate that the operation names appear as expected, especially:
+7. Import or re-import the Web Service template if route mappings changed:
 
 ```text
-ZnunyAgentList::Config
-ZnunyAgentList::Health
+examples/webservices/AdvancedZnunyAgentListREST.yml
 ```
 
-Do not expose the web service publicly without network-level restrictions.
+Because Web Service configuration is stored in the Znuny database, updating the
+repository or installing a new `.opm` does not automatically update an already
+imported Web Service.
 
-## REST Testing Checklist
+## Testing Workflow
 
-On the real Znuny 6.5.20 server, validate:
+Run source verification:
 
-- unauthenticated requests are rejected;
-- invalid credentials are rejected;
-- authenticated customer users are rejected;
-- authenticated agents without `api_group` `ro` permission are rejected;
-- the dedicated API agent with `api_group` `ro` permission is allowed;
-- `Health` requires authentication and group permission;
-- customer search rejects wildcard-only values;
-- response payloads contain only explicit allow-listed fields;
-- `ValidateTicketCreate` returns validation results without creating tickets;
-- write operations require `ZnunyAgentList::EnableTicketWriteOperations = 1` and membership in `ZnunyAgentList::AllowedWriteGroups`.
+```bash
+cd /path/to/ZnunyAgentList
+bash scripts/verify-source.sh
+```
 
-## Upgrade Checklist
+Run the full integration smoke test:
 
-Before production upgrade use:
+```bash
+bash scripts/test-advanced-znuny-agentlist-all.sh
+```
 
-- build the new `.opm` on the Znuny server;
-- verify package metadata and installed file list;
-- test GenericInterface operation discovery;
-- test authentication and group authorization;
-- test REST behavior for every route;
-- confirm no unexpected package-owned files are added.
+On first run, the smoke test creates:
 
-## Uninstall Checklist
+```text
+scripts/test-advanced-znuny-agentlist-all.env
+```
 
-Before production uninstall use:
+The generated env file contains local test configuration and must not be
+committed. It is ignored by `.gitignore`.
 
-- review package-owned files from the SOPM;
-- confirm no database objects or migrations are involved;
-- uninstall through Znuny Package Manager tooling only after explicit approval;
-- rebuild config and clear cache as separate administrative steps if required;
-- confirm only package-owned files were removed.
+The smoke test is read-only by default. Controlled write lifecycle tests run only
+when explicitly enabled:
+
+```bash
+RUN_WRITE_TESTS=yes bash scripts/test-advanced-znuny-agentlist-all.sh
+```
+
+The smoke test covers:
+
+- health and package config;
+- session compatibility;
+- agents;
+- queues;
+- customer users;
+- ticket dictionaries;
+- default resolution and validation;
+- safe ticket get/search;
+- GenericTicketConnector read compatibility;
+- optional controlled write lifecycle.
+
+The smoke test requires local configuration values such as base URL, API user,
+ticket ID, ticket number, queue name, customer login, hostname, and log
+directory. Do not hardcode those values into the repository.
+
+## Source Layout
+
+Package runtime files:
+
+```text
+ZnunyAgentList.sopm
+Kernel/Config/Files/XML/ZnunyAgentList.xml
+Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm
+Kernel/GenericInterface/Operation/ZnunyAgentList/Config.pm
+Kernel/GenericInterface/Operation/ZnunyAgentList/Health.pm
+Kernel/GenericInterface/Operation/User/AgentList.pm
+Kernel/GenericInterface/Operation/Queue/*.pm
+Kernel/GenericInterface/Operation/CustomerUser/*.pm
+Kernel/GenericInterface/Operation/Ticket/*.pm
+```
+
+Repository-only helpers:
+
+```text
+scripts/verify-source.sh
+scripts/build-package.sh
+scripts/test-advanced-znuny-agentlist-all.sh
+examples/webservices/AdvancedZnunyAgentListREST.yml
+```
+
+The package does not install README, scripts, Web Service YAML templates, Git
+metadata, logs, review files, or generated `.opm` files.
 
 ## Troubleshooting
 
-- If operations do not appear in Web Service configuration, confirm package installation, config rebuild, cache cleanup, and XML registration.
-- If every request fails with `ZnunyAgentList.AuthFail`, confirm GenericInterface credentials, `UserType`, `ZnunyAgentList::AllowedGroups`, and `ro` permission in `api_group`.
-- If customer search returns an empty list with a warning, confirm the search contains at least 2 non-wildcard characters.
-- If service, SLA, or type operations return warnings, confirm the optional Znuny subsystem is enabled and available.
-- If package build fails, run `bash scripts/verify-source.sh` and confirm the `otrs` user can read the source tree and write the output directory.
-
-## Security Notes
-
-- Use a dedicated API agent, not a normal human admin account.
-- Keep `ZnunyAgentList::AllowedGroups` narrow.
-- Restrict network access to the GenericInterface endpoint.
-- Do not store credentials, tokens, or session IDs in this repository.
-- Do not add raw SQL, migrations, core modifications, write operations, or automatic deployment helpers.
+- If every package request returns `ZnunyAgentList.AuthFail`, check the API
+  credentials, `UserType`, `ZnunyAgentList::AllowedGroups`, and group `ro`
+  permission.
+- If write operations return `ZnunyAgentList.WriteForbidden`, check
+  `ZnunyAgentList::EnableTicketWriteOperations`, `AllowedWriteGroups`, and write
+  group membership.
+- If `/CustomerUser/:CustomerUserLogin` fails with authentication errors, verify
+  the imported Web Service route uses `CustomerUserLogin`, not `UserLogin`.
+- If `ResolveTicketDefaults` returns warnings, verify that the hostname first
+  token maps to the intended queue and customer user naming rule.
+- If the smoke test reports a missing route after a YAML route change, re-import
+  or update the Web Service in Znuny Admin.
+- If operations do not appear in Web Service configuration, verify package
+  installation, config rebuild, cache cleanup, and SysConfig operation
+  registration.
 
 ## Development Notes
 
-- Local Windows checks are useful for Git hygiene only.
-- Runtime syntax checks, package build, installation, operation discovery, and REST testing require the real Znuny 6.5.20 server.
-- Current package version is `1.2.0`.
-- Do not add new GenericInterface operations without updating XML, SOPM, docs, and server-side validation.
+- Keep runtime changes, Web Service template changes, scripts, and documentation
+  in sync.
+- Do not commit generated `.opm` files, local smoke-test env files, logs,
+  credentials, tokens, or session IDs.
+- Do not add raw SQL, migrations, Znuny core modifications, or automatic
+  deployment actions.
+- Local Windows checks are Git hygiene only. Runtime validation belongs on the
+  real Znuny server.

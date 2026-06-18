@@ -1,5 +1,9 @@
-# Generated package and review artifacts
+# Release/build artifacts
+release-assets/
 *.opm
+*.opm.sha256
+
+# Generated package and review artifacts
 *.zip
 dist/
 build/
