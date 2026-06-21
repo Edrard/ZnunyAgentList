@@ -357,6 +357,460 @@ or internal Perl object data. Typical safe ticket fields include:
 }
 ```
 
+## API Response Examples
+
+The examples below show the package-specific response payloads integrations
+should expect from `ZnunyAgentList` operations. Depending on the GenericInterface
+transport/client, Znuny may wrap these values inside a top-level transport
+structure. Integrations should inspect JSON body fields such as `Error`,
+`Success`, `Data`, `Found`, `Warnings`, and `Errors`, not only HTTP status.
+
+Standard GenericTicketConnector compatibility routes follow standard Znuny
+GenericTicketConnector response shapes and are not documented in detail here.
+
+### Health
+
+`GET /Health`
+
+```json
+{
+  "Plugin": "ZnunyAgentList",
+  "Version": "1.2.6",
+  "Success": 1,
+  "Time": "2026-06-18 12:00:00"
+}
+```
+
+### Package Configuration
+
+`GET /SystemConfig`
+
+```json
+{
+  "Plugin": "ZnunyAgentList",
+  "Version": "1.2.6",
+  "Features": {
+    "AgentList": 1,
+    "QueueList": 1,
+    "CustomerUserSearch": 1,
+    "TicketGet": 1,
+    "TicketSearch": 1,
+    "TicketArticleCreate": 1,
+    "TicketClose": 1,
+    "TicketReopen": 1,
+    "ValidateTicketCreate": 1
+  }
+}
+```
+
+### Agents
+
+`GET /Agent`
+
+```json
+{
+  "Agents": [
+    {
+      "UserID": 42,
+      "UserLogin": "api.integration",
+      "UserFullname": "API Integration"
+    }
+  ]
+}
+```
+
+### Queues
+
+`GET /Queue`
+
+```json
+{
+  "Queues": [
+    {
+      "QueueID": 12,
+      "Name": "Support",
+      "FullName": "Support",
+      "ValidID": 1
+    }
+  ]
+}
+```
+
+`GET /Queue/:QueueID` and `GET /QueueByName/:Name`
+
+```json
+{
+  "Queue": {
+    "Found": 1,
+    "QueueID": 12,
+    "Name": "Support",
+    "FullName": "Support",
+    "ValidID": 1
+  }
+}
+```
+
+### Customer Users
+
+`GET /CustomerUser?Search=example&Limit=10`
+
+```json
+{
+  "CustomerUsers": [
+    {
+      "UserLogin": "example.customer",
+      "UserCustomerID": "example-customer",
+      "UserFirstname": "Example",
+      "UserLastname": "Customer",
+      "UserEmail": "customer@example.invalid"
+    }
+  ]
+}
+```
+
+`GET /CustomerUser/:CustomerUserLogin`
+
+```json
+{
+  "CustomerUser": {
+    "Found": 1,
+    "UserLogin": "example.customer",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "Example",
+    "UserLastname": "Customer",
+    "UserEmail": "customer@example.invalid"
+  }
+}
+```
+
+Wildcard-only or too-short customer searches return an empty result and warning:
+
+```json
+{
+  "CustomerUsers": [],
+  "Warnings": [
+    "Search must contain at least 2 non-wildcard characters."
+  ]
+}
+```
+
+### Ticket Dictionaries
+
+`GET /TicketState`
+
+```json
+{
+  "TicketStates": [
+    {
+      "ID": 4,
+      "StateID": 4,
+      "Name": "open",
+      "State": "open",
+      "StateTypeID": 2,
+      "StateType": "open",
+      "ValidID": 1
+    }
+  ]
+}
+```
+
+`GET /TicketPriority`
+
+```json
+{
+  "TicketPriorities": [
+    {
+      "ID": 3,
+      "PriorityID": 3,
+      "Name": "normal",
+      "Priority": "normal",
+      "ValidID": 1
+    }
+  ]
+}
+```
+
+`GET /TicketType`
+
+```json
+{
+  "TicketTypes": [
+    {
+      "ID": 1,
+      "TypeID": 1,
+      "Name": "Incident",
+      "ValidID": 1
+    }
+  ],
+  "Warnings": []
+}
+```
+
+`GET /Service`
+
+```json
+{
+  "Services": [
+    {
+      "ID": 10,
+      "ServiceID": 10,
+      "Name": "Example Service",
+      "ValidID": 1
+    }
+  ],
+  "Warnings": []
+}
+```
+
+`GET /SLA`
+
+```json
+{
+  "SLAs": [
+    {
+      "ID": 5,
+      "SLAID": 5,
+      "Name": "Example SLA",
+      "ValidID": 1
+    }
+  ],
+  "Warnings": []
+}
+```
+
+### Defaults And TicketCreate Validation
+
+`GET /ResolveTicketDefaults?Hostname=Support-host`
+
+```json
+{
+  "Input": {
+    "HostName": "Support-host"
+  },
+  "Detected": {
+    "QueueName": "Support-host",
+    "CustomerUserLogin": "Support-hostClients"
+  },
+  "Queue": {
+    "Found": 0
+  },
+  "CustomerUser": {
+    "Found": 0
+  },
+  "Warnings": [
+    "Queue not found.",
+    "CustomerUser not found."
+  ]
+}
+```
+
+`POST /ValidateTicketCreate`
+
+```json
+{
+  "Valid": 1,
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+Validation failures keep HTTP transport success but return `Valid: 0`:
+
+```json
+{
+  "Valid": 0,
+  "Errors": [
+    "Queue not found.",
+    "CustomerUser not found."
+  ],
+  "Warnings": []
+}
+```
+
+### Safe Ticket Lookup
+
+`GET /ZnunyAgentListTicket/:TicketID`
+
+```json
+{
+  "Found": 1,
+  "Ticket": {
+    "TicketID": 12345,
+    "TicketNumber": "202601010000001",
+    "Title": "Example ticket",
+    "QueueID": 12,
+    "Queue": "Support",
+    "OwnerID": 42,
+    "Owner": "api.integration",
+    "CustomerUserID": "example-customer",
+    "CustomerUser": "example.customer",
+    "StateID": 4,
+    "State": "open",
+    "StateType": "open",
+    "PriorityID": 3,
+    "Priority": "normal",
+    "Created": "2026-01-01 10:00:00",
+    "Changed": "2026-01-01 10:15:00"
+  },
+  "Warnings": []
+}
+```
+
+`GET /ZnunyAgentListTicketNumber/:TicketNumber` returns the same safe ticket
+shape using `TicketNumber` lookup.
+
+Not found:
+
+```json
+{
+  "Found": 0,
+  "Ticket": null,
+  "Warnings": [
+    "Ticket not found."
+  ]
+}
+```
+
+### Safe Ticket Search
+
+`GET /ZnunyAgentListTicketSearch`
+
+```json
+{
+  "Tickets": [],
+  "Count": 0,
+  "Limit": 50,
+  "Offset": 0,
+  "SortBy": "Created",
+  "SortDirection": "DESC",
+  "Warnings": [
+    "At least one search filter is required."
+  ]
+}
+```
+
+`GET /ZnunyAgentListTicketSearch?TicketNumber=202601010000001`
+
+```json
+{
+  "Tickets": [
+    {
+      "TicketID": 12345,
+      "TicketNumber": "202601010000001",
+      "Title": "Example ticket",
+      "Queue": "Support",
+      "State": "open",
+      "StateType": "open"
+    }
+  ],
+  "Count": 1,
+  "Limit": 50,
+  "Offset": 0,
+  "SortBy": "Created",
+  "SortDirection": "DESC",
+  "Warnings": []
+}
+```
+
+`GET /ZnunyAgentListTicketSearch?Queue=Support&StateType=open&Limit=5`
+
+```json
+{
+  "Tickets": [
+    {
+      "TicketID": 12345,
+      "TicketNumber": "202601010000001",
+      "Title": "Example ticket",
+      "Queue": "Support",
+      "State": "open",
+      "StateType": "open"
+    }
+  ],
+  "Count": 1,
+  "Limit": 5,
+  "Offset": 0,
+  "SortBy": "Created",
+  "SortDirection": "DESC",
+  "Warnings": []
+}
+```
+
+### Controlled Write Responses
+
+`POST /TicketArticle`
+
+```json
+{
+  "TicketID": 12345,
+  "TicketNumber": "202601010000001",
+  "ArticleID": 67890,
+  "Kind": "internal_note",
+  "Warnings": []
+}
+```
+
+`POST /TicketClose`
+
+```json
+{
+  "Ticket": {
+    "TicketID": 12345,
+    "TicketNumber": "202601010000001",
+    "Title": "Example ticket",
+    "Queue": "Support",
+    "State": "closed successful",
+    "StateType": "closed"
+  },
+  "ArticleID": 67891,
+  "State": "closed successful",
+  "Reason": "Problem resolved from integration workflow.",
+  "Warnings": []
+}
+```
+
+`POST /TicketReopen`
+
+```json
+{
+  "Ticket": {
+    "TicketID": 12345,
+    "TicketNumber": "202601010000001",
+    "Title": "Example ticket",
+    "Queue": "Support",
+    "State": "open",
+    "StateType": "open"
+  },
+  "ArticleID": 67892,
+  "State": "open",
+  "Reason": "Problem reappeared in monitoring.",
+  "Warnings": []
+}
+```
+
+### Error Responses
+
+Authentication or read authorization failure:
+
+```json
+{
+  "Error": {
+    "ErrorCode": "ZnunyAgentList.AuthFail",
+    "ErrorMessage": "ZnunyAgentList: Authentication failed."
+  }
+}
+```
+
+Write authorization failure:
+
+```json
+{
+  "Error": {
+    "ErrorCode": "ZnunyAgentList.WriteForbidden",
+    "ErrorMessage": "ZnunyAgentList: Write operation is forbidden."
+  }
+}
+```
+
 ## Installation And Update Workflow
 
 Use the real Znuny server for package verification, build, install, upgrade, and
