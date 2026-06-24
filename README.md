@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.2.7`.
+Current stable runtime version: `1.2.7`.
 
 The package provides a controlled REST surface for:
 
@@ -200,7 +200,7 @@ operations.
 | Method | Route | Operation | Purpose | Important Parameters | Response Shape |
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/Health` | `ZnunyAgentList::Health` | Authenticated package health | none | `Plugin`, `Version`, `Success`, `Time` |
-| `GET` | `/SystemConfig` | `ZnunyAgentList::Config` | Package capabilities/config summary | none | `Plugin`, `Version`, `Features`, `WriteProtection` |
+| `GET` | `/SystemConfig` | `ZnunyAgentList::Config` | Package capabilities/config summary | none | `Plugin`, `Version`, `Features`, `Znuny` |
 | `GET` | `/Agent` | `User::AgentList` | List valid active agents | none | `Agents[]` with `UserID`, `UserLogin`, `UserFullname` |
 | `GET` | `/Queue` | `Queue::List` | List valid queues | none | `Queues[]` |
 | `GET` | `/Queue/:QueueID` | `Queue::Get` | Get queue by numeric ID | `QueueID` path parameter | `Queue.Found`, queue metadata |
@@ -215,9 +215,9 @@ operations.
 | `GET` | `/ResolveTicketDefaults?Hostname=...` | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | `Hostname` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
 | `GET` | `/ResolveTicketDefaults?HostName=...` | `Ticket::ResolveTicketDefaults` | Same as above with alternate parameter spelling | `HostName` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
 | `POST` | `/ValidateTicketCreate` | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data without creating a ticket | `OwnerID`, `Queue`, `CustomerUser`, `State`, `Lock` as available | `Valid`, `Errors[]`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, safe `Ticket` with article sync metadata, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, safe `Ticket` with article sync metadata, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search | filters such as `TicketNumber`, `Queue`, `StateType`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | `Tickets[]` with IDs/sync metadata, `Count`, `Limit`, `Offset`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search | filters such as `TicketNumber`, `Queue`, `StateType`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | `Tickets[]` with ID/sync fields; never article/note bodies, `Count`, `Limit`, `Offset`, `Warnings[]` |
 
 `/CustomerUser/:CustomerUserLogin` intentionally uses a customer-specific path
 parameter name. This avoids conflict with the GenericInterface authentication
@@ -348,13 +348,15 @@ or internal Perl object data. Typical safe ticket fields include:
   "TicketID": "TICKET_ID",
   "TicketNumber": "TICKET_NUMBER",
   "Title": "Example ticket",
-  "QueueID": 12,
+  "QueueID": 10,
   "Queue": "Support",
-  "OwnerID": 42,
-  "Owner": "api.integration",
+  "OwnerID": 2,
+  "Owner": "api.agent@example.invalid",
   "ResponsibleID": 0,
+  "Responsible": "",
   "CustomerID": "example-customer",
-  "CustomerUserID": "example.customer",
+  "CustomerUserID": "example-customer-user",
+  "CustomerUser": "example-customer-user",
   "StateID": 4,
   "State": "open",
   "StateType": "open",
@@ -366,12 +368,12 @@ or internal Perl object data. Typical safe ticket fields include:
   "Service": "",
   "SLAID": 0,
   "SLA": "",
-  "Created": "2026-06-18 10:00:00",
-  "Changed": "2026-06-18 10:15:00",
+  "Created": "2026-01-01 10:00:00",
+  "Changed": "2026-01-01 10:30:00",
   "ArticleCount": 2,
   "LastArticleID": 67890,
-  "LastArticleCreated": "2026-06-18 10:15:00",
-  "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  "LastArticleCreated": "2026-01-01 10:30:00",
+  "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
 }
 ```
 
@@ -380,6 +382,20 @@ Znuny's metadata-only article list. `SyncFingerprint` changes when ticket
 metadata changes or when a new article, note, or reply is added. Safe ticket
 search never returns article subjects, bodies, note text, reply text,
 attachments, or full article metadata.
+
+### SyncFingerprint
+
+`SyncFingerprint` is a deterministic safe synchronization marker. It is based on
+safe ticket metadata and article summary metadata, not on article body content.
+It changes when ticket metadata changes or when a new article, note, or reply is
+added. Integrations can store it locally and compare it on the next sync pass to
+detect whether a linked ticket needs to be refreshed.
+
+`SyncFingerprint` is not an authentication token and is not a security secret.
+Safe ticket search returns only the article count and latest-article metadata
+needed for synchronization. Clients that require full article content should use
+an intentionally designed endpoint rather than `Ticket::Search`; this package
+does not add such an endpoint.
 
 ## API Response Examples
 
@@ -401,7 +417,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
   "Plugin": "ZnunyAgentList",
   "Version": "1.2.7",
   "Success": 1,
-  "Time": "2026-06-18 12:00:00"
+  "Time": "2026-01-01 10:00:00"
 }
 ```
 
@@ -662,19 +678,20 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
     "TicketID": 12345,
     "TicketNumber": "202601010000001",
     "Title": "Example ticket",
-    "QueueID": 12,
+    "QueueID": 10,
     "Queue": "Support",
-    "OwnerID": 42,
-    "Owner": "api.integration",
+    "OwnerID": 2,
+    "Owner": "api.agent@example.invalid",
     "ResponsibleID": 0,
+    "Responsible": "",
     "CustomerID": "example-customer",
-    "CustomerUserID": "example-customer",
-    "CustomerUser": "example.customer",
+    "CustomerUserID": "example-customer-user",
+    "CustomerUser": "example-customer-user",
     "StateID": 4,
     "State": "open",
     "StateType": "open",
     "PriorityID": 3,
-    "Priority": "normal",
+    "Priority": "3 normal",
     "TypeID": 1,
     "Type": "Incident",
     "ServiceID": 0,
@@ -682,18 +699,36 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
     "SLAID": 0,
     "SLA": "",
     "Created": "2026-01-01 10:00:00",
-    "Changed": "2026-01-01 10:15:00",
+    "Changed": "2026-01-01 10:30:00",
     "ArticleCount": 2,
     "LastArticleID": 67890,
-    "LastArticleCreated": "2026-01-01 10:15:00",
-    "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    "LastArticleCreated": "2026-01-01 10:30:00",
+    "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
   },
   "Warnings": []
 }
 ```
 
 `GET /ZnunyAgentListTicketNumber/:TicketNumber` returns the same safe ticket
-shape using `TicketNumber` lookup.
+shape, including the article sync summary and `SyncFingerprint`, using
+`TicketNumber` lookup:
+
+```json
+{
+  "Found": 1,
+  "Ticket": {
+    "TicketID": 12345,
+    "TicketNumber": "202601010000001",
+    "QueueID": 10,
+    "Queue": "Support",
+    "ArticleCount": 2,
+    "LastArticleID": 67890,
+    "LastArticleCreated": "2026-01-01 10:30:00",
+    "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
+  },
+  "Warnings": []
+}
+```
 
 Not found:
 
@@ -734,18 +769,20 @@ Not found:
       "TicketID": 12345,
       "TicketNumber": "202601010000001",
       "Title": "Example ticket",
-      "QueueID": 12,
+      "QueueID": 10,
       "Queue": "Support",
-      "OwnerID": 42,
-      "Owner": "api.integration",
+      "OwnerID": 2,
+      "Owner": "api.agent@example.invalid",
       "ResponsibleID": 0,
+      "Responsible": "",
       "CustomerID": "example-customer",
-      "CustomerUserID": "example.customer",
+      "CustomerUserID": "example-customer-user",
+      "CustomerUser": "example-customer-user",
       "StateID": 4,
       "State": "open",
       "StateType": "open",
       "PriorityID": 3,
-      "Priority": "normal",
+      "Priority": "3 normal",
       "TypeID": 1,
       "Type": "Incident",
       "ServiceID": 0,
@@ -753,11 +790,11 @@ Not found:
       "SLAID": 0,
       "SLA": "",
       "Created": "2026-01-01 10:00:00",
-      "Changed": "2026-01-01 10:15:00",
+      "Changed": "2026-01-01 10:30:00",
       "ArticleCount": 2,
       "LastArticleID": 67890,
-      "LastArticleCreated": "2026-01-01 10:15:00",
-      "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      "LastArticleCreated": "2026-01-01 10:30:00",
+      "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
     }
   ],
   "Count": 1,
@@ -778,12 +815,15 @@ Not found:
       "TicketID": 12345,
       "TicketNumber": "202601010000001",
       "Title": "Example ticket",
-      "QueueID": 12,
+      "QueueID": 10,
       "Queue": "Support",
-      "OwnerID": 42,
+      "OwnerID": 2,
+      "Owner": "api.agent@example.invalid",
       "ResponsibleID": 0,
+      "Responsible": "",
       "CustomerID": "example-customer",
-      "CustomerUserID": "example.customer",
+      "CustomerUserID": "example-customer-user",
+      "CustomerUser": "example-customer-user",
       "StateID": 4,
       "State": "open",
       "StateType": "open",
@@ -792,11 +832,11 @@ Not found:
       "ServiceID": 0,
       "SLAID": 0,
       "Created": "2026-01-01 10:00:00",
-      "Changed": "2026-01-01 10:15:00",
+      "Changed": "2026-01-01 10:30:00",
       "ArticleCount": 2,
       "LastArticleID": 67890,
-      "LastArticleCreated": "2026-01-01 10:15:00",
-      "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      "LastArticleCreated": "2026-01-01 10:30:00",
+      "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
     }
   ],
   "Count": 1,
