@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current stable runtime version: `1.2.6`.
+Current package version: `1.2.7`.
 
 The package provides a controlled REST surface for:
 
@@ -215,9 +215,9 @@ operations.
 | `GET` | `/ResolveTicketDefaults?Hostname=...` | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | `Hostname` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
 | `GET` | `/ResolveTicketDefaults?HostName=...` | `Ticket::ResolveTicketDefaults` | Same as above with alternate parameter spelling | `HostName` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
 | `POST` | `/ValidateTicketCreate` | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data without creating a ticket | `OwnerID`, `Queue`, `CustomerUser`, `State`, `Lock` as available | `Valid`, `Errors[]`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, `Ticket`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, `Ticket`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search | filters such as `TicketNumber`, `Queue`, `StateType`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | `Tickets[]`, `Count`, `Limit`, `Offset`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, safe `Ticket` with article sync metadata, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, safe `Ticket` with article sync metadata, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search | filters such as `TicketNumber`, `Queue`, `StateType`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | `Tickets[]` with IDs/sync metadata, `Count`, `Limit`, `Offset`, `Warnings[]` |
 
 `/CustomerUser/:CustomerUserLogin` intentionally uses a customer-specific path
 parameter name. This avoids conflict with the GenericInterface authentication
@@ -348,14 +348,38 @@ or internal Perl object data. Typical safe ticket fields include:
   "TicketID": "TICKET_ID",
   "TicketNumber": "TICKET_NUMBER",
   "Title": "Example ticket",
+  "QueueID": 12,
   "Queue": "Support",
+  "OwnerID": 42,
+  "Owner": "api.integration",
+  "ResponsibleID": 0,
+  "CustomerID": "example-customer",
+  "CustomerUserID": "example.customer",
+  "StateID": 4,
   "State": "open",
   "StateType": "open",
+  "PriorityID": 3,
   "Priority": "3 normal",
+  "TypeID": 1,
+  "Type": "Incident",
+  "ServiceID": 0,
+  "Service": "",
+  "SLAID": 0,
+  "SLA": "",
   "Created": "2026-06-18 10:00:00",
-  "Changed": "2026-06-18 10:15:00"
+  "Changed": "2026-06-18 10:15:00",
+  "ArticleCount": 2,
+  "LastArticleID": 67890,
+  "LastArticleCreated": "2026-06-18 10:15:00",
+  "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
 ```
+
+`ArticleCount`, `LastArticleID`, and `LastArticleCreated` are derived from
+Znuny's metadata-only article list. `SyncFingerprint` changes when ticket
+metadata changes or when a new article, note, or reply is added. Safe ticket
+search never returns article subjects, bodies, note text, reply text,
+attachments, or full article metadata.
 
 ## API Response Examples
 
@@ -375,7 +399,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.6",
+  "Version": "1.2.7",
   "Success": 1,
   "Time": "2026-06-18 12:00:00"
 }
@@ -388,7 +412,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.6",
+  "Version": "1.2.7",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -642,6 +666,8 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
     "Queue": "Support",
     "OwnerID": 42,
     "Owner": "api.integration",
+    "ResponsibleID": 0,
+    "CustomerID": "example-customer",
     "CustomerUserID": "example-customer",
     "CustomerUser": "example.customer",
     "StateID": 4,
@@ -649,8 +675,18 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
     "StateType": "open",
     "PriorityID": 3,
     "Priority": "normal",
+    "TypeID": 1,
+    "Type": "Incident",
+    "ServiceID": 0,
+    "Service": "",
+    "SLAID": 0,
+    "SLA": "",
     "Created": "2026-01-01 10:00:00",
-    "Changed": "2026-01-01 10:15:00"
+    "Changed": "2026-01-01 10:15:00",
+    "ArticleCount": 2,
+    "LastArticleID": 67890,
+    "LastArticleCreated": "2026-01-01 10:15:00",
+    "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   },
   "Warnings": []
 }
@@ -698,9 +734,30 @@ Not found:
       "TicketID": 12345,
       "TicketNumber": "202601010000001",
       "Title": "Example ticket",
+      "QueueID": 12,
       "Queue": "Support",
+      "OwnerID": 42,
+      "Owner": "api.integration",
+      "ResponsibleID": 0,
+      "CustomerID": "example-customer",
+      "CustomerUserID": "example.customer",
+      "StateID": 4,
       "State": "open",
-      "StateType": "open"
+      "StateType": "open",
+      "PriorityID": 3,
+      "Priority": "normal",
+      "TypeID": 1,
+      "Type": "Incident",
+      "ServiceID": 0,
+      "Service": "",
+      "SLAID": 0,
+      "SLA": "",
+      "Created": "2026-01-01 10:00:00",
+      "Changed": "2026-01-01 10:15:00",
+      "ArticleCount": 2,
+      "LastArticleID": 67890,
+      "LastArticleCreated": "2026-01-01 10:15:00",
+      "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
   ],
   "Count": 1,
@@ -721,9 +778,25 @@ Not found:
       "TicketID": 12345,
       "TicketNumber": "202601010000001",
       "Title": "Example ticket",
+      "QueueID": 12,
       "Queue": "Support",
+      "OwnerID": 42,
+      "ResponsibleID": 0,
+      "CustomerID": "example-customer",
+      "CustomerUserID": "example.customer",
+      "StateID": 4,
       "State": "open",
-      "StateType": "open"
+      "StateType": "open",
+      "PriorityID": 3,
+      "TypeID": 1,
+      "ServiceID": 0,
+      "SLAID": 0,
+      "Created": "2026-01-01 10:00:00",
+      "Changed": "2026-01-01 10:15:00",
+      "ArticleCount": 2,
+      "LastArticleID": 67890,
+      "LastArticleCreated": "2026-01-01 10:15:00",
+      "SyncFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
   ],
   "Count": 1,
@@ -843,7 +916,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.2.6.opm
+/path/to/output/ZnunyAgentList-1.2.7.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -852,14 +925,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.6.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.7.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.6.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.7.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.2.7 - Unreleased
+
+- Extend safe ticket search responses with IDs and sync metadata for external synchronization.
+- Extend safe ticket get responses with article sync metadata and `SyncFingerprint`.
+- Keep article bodies and note bodies out of safe ticket search responses.
+
 ## 1.2.6 - Unreleased
 
 - Fix `CustomerUser::Get` route parameter conflict with GenericInterface `UserLogin` authentication.
