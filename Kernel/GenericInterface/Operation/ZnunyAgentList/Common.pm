@@ -3,10 +3,12 @@ package Kernel::GenericInterface::Operation::ZnunyAgentList::Common;
 use strict;
 use warnings;
 
+use Digest::SHA qw(sha256_hex);
+
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.2.6';
+use constant PACKAGE_VERSION => '1.2.7';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -365,22 +367,31 @@ sub SafeTicketData {
     my ( $Class, %Ticket ) = @_;
 
     my $SafeTicket = {
-        TicketID       => 0 + ( $Ticket{TicketID} || 0 ),
-        TicketNumber   => $Ticket{TicketNumber}   // q{},
-        Title          => $Ticket{Title}          // q{},
-        QueueID        => 0 + ( $Ticket{QueueID} || 0 ),
-        Queue          => $Ticket{Queue}          // q{},
-        OwnerID        => 0 + ( $Ticket{OwnerID} || 0 ),
-        Owner          => $Ticket{Owner}          // q{},
-        CustomerUserID => $Ticket{CustomerUserID} // q{},
-        CustomerUser   => $Ticket{CustomerUser}   // q{},
-        StateID        => 0 + ( $Ticket{StateID} || 0 ),
-        State          => $Ticket{State}          // q{},
+        TicketID       => 0 + ( $Ticket{TicketID}       || 0 ),
+        TicketNumber   => $Ticket{TicketNumber}         // q{},
+        Title          => $Ticket{Title}                // q{},
+        QueueID        => 0 + ( $Ticket{QueueID}        || 0 ),
+        Queue          => $Ticket{Queue}                // q{},
+        OwnerID        => 0 + ( $Ticket{OwnerID}        || 0 ),
+        Owner          => $Ticket{Owner}                // q{},
+        ResponsibleID  => 0 + ( $Ticket{ResponsibleID}  || 0 ),
+        Responsible    => $Ticket{Responsible}          // q{},
+        CustomerID     => $Ticket{CustomerID}           // q{},
+        CustomerUserID => $Ticket{CustomerUserID}       // q{},
+        CustomerUser   => $Ticket{CustomerUser}         // q{},
+        StateID        => 0 + ( $Ticket{StateID}        || 0 ),
+        State          => $Ticket{State}                // q{},
         StateType      => $Ticket{StateType} || $Ticket{StateTypeName} || q{},
-        PriorityID     => 0 + ( $Ticket{PriorityID} || 0 ),
-        Priority       => $Ticket{Priority}       // q{},
-        Created        => $Ticket{Created}        || $Ticket{CreateTime} || q{},
-        Changed        => $Ticket{Changed}        || $Ticket{ChangeTime} || q{},
+        PriorityID     => 0 + ( $Ticket{PriorityID}     || 0 ),
+        Priority       => $Ticket{Priority}             // q{},
+        TypeID         => 0 + ( $Ticket{TypeID}         || 0 ),
+        Type           => $Ticket{Type}                 // q{},
+        ServiceID      => 0 + ( $Ticket{ServiceID}      || 0 ),
+        Service        => $Ticket{Service}              // q{},
+        SLAID          => 0 + ( $Ticket{SLAID}          || 0 ),
+        SLA            => $Ticket{SLA}                  // q{},
+        Created        => $Ticket{Created} || $Ticket{CreateTime} || q{},
+        Changed        => $Ticket{Changed} || $Ticket{ChangeTime} || q{},
     };
 
     if ( defined $Ticket{CloseTime} && $Ticket{CloseTime} ne q{} ) {
@@ -395,7 +406,75 @@ sub SafeTicketData {
         $SafeTicket->{StateType} = $StateTypeData->{StateType} || q{};
     }
 
+    my $ArticleSyncData = $Class->TicketArticleSyncData(
+        TicketID => $SafeTicket->{TicketID},
+    );
+
+    $SafeTicket->{ArticleCount}       = $ArticleSyncData->{ArticleCount};
+    $SafeTicket->{LastArticleID}      = $ArticleSyncData->{LastArticleID};
+    $SafeTicket->{LastArticleCreated} = $ArticleSyncData->{LastArticleCreated};
+    $SafeTicket->{SyncFingerprint}    = sha256_hex(
+        join "\x1e",
+        $SafeTicket->{TicketID},
+        $SafeTicket->{TicketNumber},
+        $SafeTicket->{Changed},
+        $SafeTicket->{ArticleCount},
+        $SafeTicket->{LastArticleID},
+        $SafeTicket->{LastArticleCreated},
+    );
+
     return $SafeTicket;
+}
+
+sub TicketArticleSyncData {
+    my ( $Class, %Param ) = @_;
+
+    my $SyncData = {
+        ArticleCount       => 0,
+        LastArticleID      => 0,
+        LastArticleCreated => q{},
+    };
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+    return $SyncData if !$TicketID;
+
+    my $ArticleObject = eval { $Kernel::OM->Get('Kernel::System::Ticket::Article') };
+    return $SyncData if !$ArticleObject;
+
+    my @Articles = eval {
+        $ArticleObject->ArticleList(
+            TicketID => $TicketID,
+        );
+    };
+    return $SyncData if $@ || !@Articles;
+
+    my @SafeArticles;
+    for my $Article (@Articles) {
+        next if ref $Article ne 'HASH';
+
+        my $ArticleID = $Class->PositiveInt( $Article->{ArticleID} );
+        next if !$ArticleID;
+
+        push @SafeArticles, {
+            ArticleID => $ArticleID,
+            Created   => $Class->SafeString( $Article->{CreateTime} || $Article->{Created}, 32 ),
+        };
+    }
+
+    return $SyncData if !@SafeArticles;
+
+    @SafeArticles = sort {
+        $a->{ArticleID} <=> $b->{ArticleID}
+            || $a->{Created} cmp $b->{Created}
+    } @SafeArticles;
+
+    my $LastArticle = $SafeArticles[-1];
+
+    $SyncData->{ArticleCount}       = 0 + scalar @SafeArticles;
+    $SyncData->{LastArticleID}      = 0 + $LastArticle->{ArticleID};
+    $SyncData->{LastArticleCreated} = $LastArticle->{Created};
+
+    return $SyncData;
 }
 
 sub StateTypeData {
