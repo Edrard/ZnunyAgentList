@@ -23,7 +23,6 @@ sub Run {
 
     my @Warnings;
     my %SearchParam = (
-        Result     => 'ARRAY',
         Permission => 'ro',
         UserID     => $UserID,
     );
@@ -47,6 +46,7 @@ sub Run {
     my $RawPage           = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Page' );
     my $RawSortBy         = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'SortBy' );
     my $RawSortDirection  = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'SortDirection' );
+    my $RawCountOnly      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CountOnly' );
 
     my $QueueID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
         $RawQueueID,
@@ -240,25 +240,31 @@ sub Run {
     my $SortDirection = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SortDirection(
         $RawSortDirection,
     );
+    my $CountOnly = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Boolean(
+        $RawCountOnly,
+    );
 
     if ( !$HasFilter ) {
         my @NoFilterWarnings = ( @Warnings, 'At least one search filter is required.' );
+        my $Data = {
+            Tickets       => [],
+            Count         => 0,
+            TotalCount    => 0,
+            Limit         => $CountOnly ? 0 : $Limit,
+            Offset        => 0,
+            SortBy        => $SortBy,
+            SortDirection => $SortDirection,
+            Warnings      => \@NoFilterWarnings,
+        };
+        $Data->{CountOnly} = 1 if $CountOnly;
 
         return {
             Success => 1,
-            Data    => {
-                Tickets       => [],
-                Count         => 0,
-                Limit         => $Limit,
-                Offset        => 0,
-                SortBy        => $SortBy,
-                SortDirection => $SortDirection,
-                Warnings      => \@NoFilterWarnings,
-            },
+            Data    => $Data,
         };
     }
 
-    if ($TicketNumber) {
+    if ( $TicketNumber && !$CountOnly ) {
         my $Ticket = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketLookup(
             TicketNumber => $TicketNumber,
             UserID       => $UserID,
@@ -270,6 +276,7 @@ sub Run {
             Data    => {
                 Tickets       => \@Tickets,
                 Count         => 0 + scalar @Tickets,
+                TotalCount    => 0 + scalar @Tickets,
                 Limit         => $Limit,
                 Offset        => 0,
                 SortBy        => $SortBy,
@@ -280,13 +287,62 @@ sub Run {
     }
 
     if ($InvalidStateFilter) {
+        my $Data = {
+            Tickets       => [],
+            Count         => 0,
+            TotalCount    => 0,
+            Limit         => $CountOnly ? 0 : $Limit,
+            Offset        => $CountOnly ? 0 : $Offset,
+            SortBy        => $SortBy,
+            SortDirection => $SortDirection,
+            Warnings      => \@Warnings,
+        };
+        $Data->{CountOnly} = 1 if $CountOnly;
+
+        return {
+            Success => 1,
+            Data    => $Data,
+        };
+    }
+
+    my $TicketObject = $Kernel::OM->Get('Kernel::System::Ticket');
+    my $TotalCount   = eval {
+        $TicketObject->TicketSearch(
+            %SearchParam,
+            Result => 'COUNT',
+        );
+    };
+
+    if ( $@ || !defined $TotalCount ) {
+        my $Data = {
+            Tickets       => [],
+            Count         => 0,
+            TotalCount    => 0,
+            Limit         => $CountOnly ? 0 : $Limit,
+            Offset        => $CountOnly ? 0 : $Offset,
+            SortBy        => $SortBy,
+            SortDirection => $SortDirection,
+            Warnings      => ['Ticket search failed.'],
+        };
+        $Data->{CountOnly} = 1 if $CountOnly;
+
+        return {
+            Success => 1,
+            Data    => $Data,
+        };
+    }
+    $TotalCount = 0 + $TotalCount;
+
+    if ($CountOnly) {
         return {
             Success => 1,
             Data    => {
                 Tickets       => [],
-                Count         => 0,
-                Limit         => $Limit,
-                Offset        => $Offset,
+                Count         => $TotalCount,
+                TotalCount    => $TotalCount,
+                CountOnly     => 1,
+                Limit         => 0,
+                Offset        => 0,
                 SortBy        => $SortBy,
                 SortDirection => $SortDirection,
                 Warnings      => \@Warnings,
@@ -294,22 +350,25 @@ sub Run {
         };
     }
 
+    $SearchParam{Result}  = 'ARRAY';
     $SearchParam{SortBy}  = $SortBy;
     $SearchParam{OrderBy} = $SortDirection eq 'ASC' ? 'Up' : 'Down';
     $SearchParam{Limit}   = $Offset + $Limit;
 
-    my $TicketObject = $Kernel::OM->Get('Kernel::System::Ticket');
-    my @TicketIDs    = eval { $TicketObject->TicketSearch(%SearchParam) };
+    my @TicketIDs = eval { $TicketObject->TicketSearch(%SearchParam) };
 
     if ($@) {
         return {
             Success => 1,
             Data    => {
-                Tickets  => [],
-                Count    => 0,
-                Limit    => $Limit,
-                Offset   => $Offset,
-                Warnings => ['Ticket search failed.'],
+                Tickets       => [],
+                Count         => 0,
+                TotalCount    => $TotalCount,
+                Limit         => $Limit,
+                Offset        => $Offset,
+                SortBy        => $SortBy,
+                SortDirection => $SortDirection,
+                Warnings      => ['Ticket search failed.'],
             },
         };
     }
@@ -336,6 +395,7 @@ sub Run {
         Data    => {
             Tickets       => \@Tickets,
             Count         => 0 + scalar @Tickets,
+            TotalCount    => $TotalCount,
             Limit         => $Limit,
             Offset        => $Offset,
             SortBy        => $SortBy,
