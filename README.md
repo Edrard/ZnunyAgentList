@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current development package version: `1.2.9`.
+Current package version: `1.2.9`.
 
 The package provides a controlled REST surface for:
 
@@ -343,35 +343,41 @@ only the HTTP status code.
 Safe ticket metadata is explicitly allow-listed and does not expose full ticket
 or internal Perl object data. Typical safe ticket fields include:
 
+Depending on Znuny/GenericInterface serialization, numeric identifiers and
+counts such as `TicketID`, `QueueID`, `ArticleCount`, and `LastArticleID` may be
+returned as JSON numbers or JSON strings. Integrations should treat them as
+numeric identifiers or counts and normalize them client-side if strict typing is
+required.
+
 ```json
 {
   "TicketID": "TICKET_ID",
   "TicketNumber": "TICKET_NUMBER",
   "Title": "Example ticket",
-  "QueueID": 10,
+  "QueueID": "10",
   "Queue": "Support",
-  "OwnerID": 2,
+  "OwnerID": "2",
   "Owner": "api.agent@example.invalid",
-  "ResponsibleID": 0,
+  "ResponsibleID": "0",
   "Responsible": "",
   "CustomerID": "example-customer",
   "CustomerUserID": "example-customer-user",
   "CustomerUser": "example-customer-user",
-  "StateID": 4,
+  "StateID": "4",
   "State": "open",
   "StateType": "open",
-  "PriorityID": 3,
+  "PriorityID": "3",
   "Priority": "3 normal",
-  "TypeID": 1,
+  "TypeID": "1",
   "Type": "Incident",
-  "ServiceID": 0,
+  "ServiceID": "0",
   "Service": "",
-  "SLAID": 0,
+  "SLAID": "0",
   "SLA": "",
   "Created": "2026-01-01 10:00:00",
   "Changed": "2026-01-01 10:30:00",
-  "ArticleCount": 2,
-  "LastArticleID": 67890,
+  "ArticleCount": "2",
+  "LastArticleID": "67890",
   "LastArticleCreated": "2026-01-01 10:30:00",
   "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
 }
@@ -675,33 +681,33 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
 {
   "Found": 1,
   "Ticket": {
-    "TicketID": 12345,
+    "TicketID": "12345",
     "TicketNumber": "202601010000001",
     "Title": "Example ticket",
-    "QueueID": 10,
+    "QueueID": "10",
     "Queue": "Support",
-    "OwnerID": 2,
+    "OwnerID": "2",
     "Owner": "api.agent@example.invalid",
-    "ResponsibleID": 0,
+    "ResponsibleID": "0",
     "Responsible": "",
     "CustomerID": "example-customer",
     "CustomerUserID": "example-customer-user",
     "CustomerUser": "example-customer-user",
-    "StateID": 4,
+    "StateID": "4",
     "State": "open",
     "StateType": "open",
-    "PriorityID": 3,
+    "PriorityID": "3",
     "Priority": "3 normal",
-    "TypeID": 1,
+    "TypeID": "1",
     "Type": "Incident",
-    "ServiceID": 0,
+    "ServiceID": "0",
     "Service": "",
-    "SLAID": 0,
+    "SLAID": "0",
     "SLA": "",
     "Created": "2026-01-01 10:00:00",
     "Changed": "2026-01-01 10:30:00",
-    "ArticleCount": 2,
-    "LastArticleID": 67890,
+    "ArticleCount": "2",
+    "LastArticleID": "67890",
     "LastArticleCreated": "2026-01-01 10:30:00",
     "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
   },
@@ -717,12 +723,12 @@ shape, including the article sync summary and `SyncFingerprint`, using
 {
   "Found": 1,
   "Ticket": {
-    "TicketID": 12345,
+    "TicketID": "12345",
     "TicketNumber": "202601010000001",
-    "QueueID": 10,
+    "QueueID": "10",
     "Queue": "Support",
-    "ArticleCount": 2,
-    "LastArticleID": 67890,
+    "ArticleCount": "2",
+    "LastArticleID": "67890",
     "LastArticleCreated": "2026-01-01 10:30:00",
     "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
   },
@@ -805,6 +811,22 @@ details or calculate article synchronization metadata.
 `GET /ZnunyAgentListTicketSearch?CountOnly=1` still returns an empty safe result
 with `TotalCount: 0`, `Limit: 0`, and the required-filter warning.
 
+```json
+{
+  "Tickets": [],
+  "Count": 0,
+  "TotalCount": 0,
+  "CountOnly": 1,
+  "Limit": 0,
+  "Offset": 0,
+  "SortBy": "Created",
+  "SortDirection": "DESC",
+  "Warnings": [
+    "At least one search filter is required."
+  ]
+}
+```
+
 Exact ticket number:
 
 `GET /ZnunyAgentListTicketSearch?TicketNumber=2026062346000357`
@@ -884,33 +906,33 @@ Example safe response:
 {
   "Tickets": [
     {
-      "TicketID": 57250,
+      "TicketID": "57250",
       "TicketNumber": "2026062346000357",
       "Title": "Example ticket",
-      "QueueID": 49,
+      "QueueID": "49",
       "Queue": "Customer Projects",
-      "OwnerID": 2,
+      "OwnerID": "2",
       "Owner": "api.agent@example.invalid",
-      "ResponsibleID": 1,
+      "ResponsibleID": "1",
       "Responsible": "root@example.invalid",
       "CustomerID": "example customer",
       "CustomerUserID": "example-user",
       "CustomerUser": "example-user",
-      "StateID": 1,
+      "StateID": "1",
       "State": "new",
       "StateType": "new",
-      "PriorityID": 3,
+      "PriorityID": "3",
       "Priority": "3 normal",
-      "TypeID": 1,
+      "TypeID": "1",
       "Type": "Unclassified",
-      "ServiceID": 0,
+      "ServiceID": "0",
       "Service": "",
-      "SLAID": 0,
+      "SLAID": "0",
       "SLA": "",
       "Created": "2026-06-23 16:44:53",
       "Changed": "2026-06-23 16:44:55",
-      "ArticleCount": 2,
-      "LastArticleID": 340615,
+      "ArticleCount": "2",
+      "LastArticleID": "340615",
       "LastArticleCreated": "2026-06-23 16:44:54",
       "SyncFingerprint": "sha256-hex-string"
     }
@@ -933,29 +955,29 @@ Combined filters:
 {
   "Tickets": [
     {
-      "TicketID": 12345,
+      "TicketID": "12345",
       "TicketNumber": "202601010000001",
       "Title": "Example ticket",
-      "QueueID": 10,
+      "QueueID": "10",
       "Queue": "Support",
-      "OwnerID": 2,
+      "OwnerID": "2",
       "Owner": "api.agent@example.invalid",
-      "ResponsibleID": 0,
+      "ResponsibleID": "0",
       "Responsible": "",
       "CustomerID": "example-customer",
       "CustomerUserID": "example-customer-user",
       "CustomerUser": "example-customer-user",
-      "StateID": 4,
+      "StateID": "4",
       "State": "open",
       "StateType": "open",
-      "PriorityID": 3,
-      "TypeID": 1,
-      "ServiceID": 0,
-      "SLAID": 0,
+      "PriorityID": "3",
+      "TypeID": "1",
+      "ServiceID": "0",
+      "SLAID": "0",
       "Created": "2026-01-01 10:00:00",
       "Changed": "2026-01-01 10:30:00",
-      "ArticleCount": 2,
-      "LastArticleID": 67890,
+      "ArticleCount": "2",
+      "LastArticleID": "67890",
       "LastArticleCreated": "2026-01-01 10:30:00",
       "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
     }
