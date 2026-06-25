@@ -27,7 +27,8 @@ sub Run {
         Permission => 'ro',
         UserID     => $UserID,
     );
-    my $HasFilter = 0;
+    my $HasFilter          = 0;
+    my $InvalidStateFilter = 0;
 
     my $RawQueueID        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' );
     my $RawQueue          = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Queue' );
@@ -77,17 +78,63 @@ sub Run {
         100,
     );
     if ($State) {
-        $SearchParam{States} = [$State];
         $HasFilter = 1;
+
+        my $StateObject = eval { $Kernel::OM->Get('Kernel::System::State') };
+        my $ResolvedStateID = $StateObject
+            ? eval { $StateObject->StateLookup( State => $State ) }
+            : undef;
+
+        if ($ResolvedStateID) {
+            $SearchParam{StateIDs} ||= [];
+            push @{ $SearchParam{StateIDs} }, 0 + $ResolvedStateID;
+        }
+        else {
+            $InvalidStateFilter = 1;
+            push @Warnings, 'State was not found.';
+        }
     }
 
     my $StateType = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
         $RawStateType,
-        100,
+        255,
     );
     if ($StateType) {
-        $SearchParam{StateType} = [$StateType];
         $HasFilter = 1;
+
+        my %SeenStateType;
+        my @StateTypes = grep { $_ ne q{} && !$SeenStateType{$_}++ }
+            map {
+                Kernel::GenericInterface::Operation::ZnunyAgentList::Common->SafeString(
+                    $_,
+                    100,
+                )
+            }
+            split /,/, $StateType;
+
+        my $StateObject = eval { $Kernel::OM->Get('Kernel::System::State') };
+        my @StateTypeIDs;
+
+        for my $CurrentStateType (@StateTypes) {
+            my $StateTypeID = $StateObject
+                ? eval { $StateObject->StateTypeLookup( StateType => $CurrentStateType ) }
+                : undef;
+
+            if (!$StateTypeID) {
+                $InvalidStateFilter = 1;
+                last;
+            }
+
+            push @StateTypeIDs, 0 + $StateTypeID;
+        }
+
+        if ( @StateTypeIDs == @StateTypes && @StateTypeIDs ) {
+            $SearchParam{StateTypeIDs} = \@StateTypeIDs;
+        }
+        else {
+            $InvalidStateFilter = 1;
+            push @Warnings, 'StateType was not found.';
+        }
     }
 
     my $OwnerID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
@@ -232,8 +279,23 @@ sub Run {
         };
     }
 
+    if ($InvalidStateFilter) {
+        return {
+            Success => 1,
+            Data    => {
+                Tickets       => [],
+                Count         => 0,
+                Limit         => $Limit,
+                Offset        => $Offset,
+                SortBy        => $SortBy,
+                SortDirection => $SortDirection,
+                Warnings      => \@Warnings,
+            },
+        };
+    }
+
     $SearchParam{SortBy}  = $SortBy;
-    $SearchParam{OrderBy} = $SortDirection;
+    $SearchParam{OrderBy} = $SortDirection eq 'ASC' ? 'Up' : 'Down';
     $SearchParam{Limit}   = $Offset + $Limit;
 
     my $TicketObject = $Kernel::OM->Get('Kernel::System::Ticket');

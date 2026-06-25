@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current stable runtime version: `1.2.7`.
+Current development package version: `1.2.8`.
 
 The package provides a controlled REST surface for:
 
@@ -415,7 +415,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.7",
+  "Version": "1.2.8",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -428,7 +428,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.7",
+  "Version": "1.2.8",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -744,6 +744,15 @@ Not found:
 
 ### Safe Ticket Search
 
+The endpoint shape is:
+
+```text
+GET /ZnunyAgentListTicketSearch?<filter>=<value>
+```
+
+At least one meaningful filter is required. An unfiltered request returns an
+empty result with the warning `At least one search filter is required.`:
+
 `GET /ZnunyAgentListTicketSearch`
 
 ```json
@@ -760,7 +769,70 @@ Not found:
 }
 ```
 
+Exact ticket number:
+
 `GET /ZnunyAgentListTicketSearch?TicketNumber=202601010000001`
+
+State name:
+
+```text
+GET /ZnunyAgentListTicketSearch?State=new
+GET /ZnunyAgentListTicketSearch?State=open
+GET /ZnunyAgentListTicketSearch?State=closed%20successful
+```
+
+State type:
+
+```text
+GET /ZnunyAgentListTicketSearch?StateType=new
+GET /ZnunyAgentListTicketSearch?StateType=open
+GET /ZnunyAgentListTicketSearch?StateType=closed
+```
+
+Multiple state types can be supplied as a comma-separated value:
+
+```text
+GET /ZnunyAgentListTicketSearch?StateType=new,open
+```
+
+Queue, owner, and customer user:
+
+```text
+GET /ZnunyAgentListTicketSearch?Queue=Support
+GET /ZnunyAgentListTicketSearch?Queue=Customer%20Projects
+GET /ZnunyAgentListTicketSearch?OwnerID=2
+GET /ZnunyAgentListTicketSearch?CustomerUserID=example-customer-user
+```
+
+Spaces and other reserved characters in query values must be URL encoded.
+
+Pagination:
+
+```text
+GET /ZnunyAgentListTicketSearch?StateType=open&Limit=50&Offset=0
+GET /ZnunyAgentListTicketSearch?StateType=open&Limit=50&Offset=50
+```
+
+Sorting:
+
+```text
+GET /ZnunyAgentListTicketSearch?StateType=open&SortBy=Changed&SortDirection=DESC
+GET /ZnunyAgentListTicketSearch?StateType=open&SortBy=Created&SortDirection=ASC
+```
+
+For a cache warmer that synchronizes active tickets, the combined request is:
+
+```text
+GET /ZnunyAgentListTicketSearch?StateType=new,open&Limit=100&Offset=0&SortBy=Changed&SortDirection=ASC
+```
+
+The response uses an explicit safe allow-list. It does not return article,
+note, or reply bodies; article subjects; attachments; or full article metadata.
+`ArticleCount`, `LastArticleID`, and `LastArticleCreated` provide a metadata-only
+article summary. `SyncFingerprint` changes when the safe ticket metadata changes
+or when a new article, note, or reply is added.
+
+Example safe response:
 
 ```json
 {
@@ -805,6 +877,8 @@ Not found:
   "Warnings": []
 }
 ```
+
+Combined filters:
 
 `GET /ZnunyAgentListTicketSearch?Queue=Support&StateType=open&Limit=5`
 
@@ -956,7 +1030,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.2.7.opm
+/path/to/output/ZnunyAgentList-1.2.8.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -965,14 +1039,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.7.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.8.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.7.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.8.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:
