@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.2.8';
+use constant PACKAGE_VERSION => '1.2.9';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -271,6 +271,17 @@ sub PositiveInt {
     return if !defined $Value || $Value !~ m{\A[1-9][0-9]*\z};
 
     return 0 + $Value;
+}
+
+sub Boolean {
+    my ( $Class, $Value ) = @_;
+
+    my $Boolean = lc $Class->SafeString( $Value, 16 );
+
+    return 1 if $Boolean =~ m{\A(?:1|true|yes|on)\z};
+    return 0 if $Boolean =~ m{\A(?:0|false|no|off)\z};
+
+    return 0;
 }
 
 sub Limit {

@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current development package version: `1.2.8`.
+Current development package version: `1.2.9`.
 
 The package provides a controlled REST surface for:
 
@@ -217,7 +217,7 @@ operations.
 | `POST` | `/ValidateTicketCreate` | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data without creating a ticket | `OwnerID`, `Queue`, `CustomerUser`, `State`, `Lock` as available | `Valid`, `Errors[]`, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search | filters such as `TicketNumber`, `Queue`, `StateType`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | `Tickets[]` with ID/sync fields; never article/note bodies, `Count`, `Limit`, `Offset`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search and total counting | filters such as `TicketNumber`, `Queue`, `StateType`, `CountOnly`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | Safe `Tickets[]`, page `Count`, matching `TotalCount`, pagination, `Warnings[]` |
 
 `/CustomerUser/:CustomerUserLogin` intentionally uses a customer-specific path
 parameter name. This avoids conflict with the GenericInterface authentication
@@ -415,7 +415,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.8",
+  "Version": "1.2.9",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -428,7 +428,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.8",
+  "Version": "1.2.9",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -744,10 +744,10 @@ Not found:
 
 ### Safe Ticket Search
 
-The endpoint shape is:
+Endpoint:
 
 ```text
-GET /ZnunyAgentListTicketSearch?<filter>=<value>
+GET /ZnunyAgentListTicketSearch
 ```
 
 At least one meaningful filter is required. An unfiltered request returns an
@@ -759,6 +759,7 @@ empty result with the warning `At least one search filter is required.`:
 {
   "Tickets": [],
   "Count": 0,
+  "TotalCount": 0,
   "Limit": 50,
   "Offset": 0,
   "SortBy": "Created",
@@ -769,9 +770,44 @@ empty result with the warning `At least one search filter is required.`:
 }
 ```
 
+The count fields have distinct meanings:
+
+```text
+Count      = number of tickets returned in this page
+TotalCount = total number of tickets matching the filters
+CountOnly  = return only the total count, without ticket objects
+```
+
+`CountOnly` accepts `1`, `true`, `yes`, or `on`. Values `0`, `false`, `no`,
+and `off` select normal paginated search.
+
+Count active tickets without fetching ticket objects:
+
+`GET /ZnunyAgentListTicketSearch?StateType=new,open&CountOnly=1`
+
+```json
+{
+  "Tickets": [],
+  "Count": 137,
+  "TotalCount": 137,
+  "CountOnly": 1,
+  "Limit": 0,
+  "Offset": 0,
+  "SortBy": "Created",
+  "SortDirection": "DESC",
+  "Warnings": []
+}
+```
+
+`CountOnly=1` uses the same filters as normal search. It does not fetch ticket
+details or calculate article synchronization metadata.
+
+`GET /ZnunyAgentListTicketSearch?CountOnly=1` still returns an empty safe result
+with `TotalCount: 0`, `Limit: 0`, and the required-filter warning.
+
 Exact ticket number:
 
-`GET /ZnunyAgentListTicketSearch?TicketNumber=202601010000001`
+`GET /ZnunyAgentListTicketSearch?TicketNumber=2026062346000357`
 
 State name:
 
@@ -809,8 +845,9 @@ Spaces and other reserved characters in query values must be URL encoded.
 Pagination:
 
 ```text
-GET /ZnunyAgentListTicketSearch?StateType=open&Limit=50&Offset=0
-GET /ZnunyAgentListTicketSearch?StateType=open&Limit=50&Offset=50
+GET /ZnunyAgentListTicketSearch?StateType=new,open&Limit=50&Offset=0
+GET /ZnunyAgentListTicketSearch?StateType=new,open&Limit=50&Offset=50
+GET /ZnunyAgentListTicketSearch?StateType=new,open&Limit=50&Offset=100
 ```
 
 Sorting:
@@ -820,17 +857,26 @@ GET /ZnunyAgentListTicketSearch?StateType=open&SortBy=Changed&SortDirection=DESC
 GET /ZnunyAgentListTicketSearch?StateType=open&SortBy=Created&SortDirection=ASC
 ```
 
-For a cache warmer that synchronizes active tickets, the combined request is:
+A Laravel active-ticket cache warmer can use this sequence:
 
 ```text
-GET /ZnunyAgentListTicketSearch?StateType=new,open&Limit=100&Offset=0&SortBy=Changed&SortDirection=ASC
+1. GET /ZnunyAgentListTicketSearch?StateType=new,open&CountOnly=1
+2. Read TotalCount.
+3. Iterate Offset from 0 to TotalCount using Limit=50.
+4. GET /ZnunyAgentListTicketSearch?StateType=new,open&Limit=50&Offset=<offset>
+5. Cache safe ticket metadata by TicketID, TicketNumber, and SyncFingerprint.
 ```
 
 The response uses an explicit safe allow-list. It does not return article,
 note, or reply bodies; article subjects; attachments; or full article metadata.
-`ArticleCount`, `LastArticleID`, and `LastArticleCreated` provide a metadata-only
-article summary. `SyncFingerprint` changes when the safe ticket metadata changes
-or when a new article, note, or reply is added.
+
+- `ArticleCount`: safe count of articles.
+- `LastArticleID`: newest article ID.
+- `LastArticleCreated`: creation timestamp of the newest article.
+- `SyncFingerprint`: stable hash for external synchronization comparisons.
+
+`SyncFingerprint` changes when safe ticket metadata changes or when a new
+article, note, or reply is added.
 
 Example safe response:
 
@@ -838,38 +884,39 @@ Example safe response:
 {
   "Tickets": [
     {
-      "TicketID": 12345,
-      "TicketNumber": "202601010000001",
+      "TicketID": 57250,
+      "TicketNumber": "2026062346000357",
       "Title": "Example ticket",
-      "QueueID": 10,
-      "Queue": "Support",
+      "QueueID": 49,
+      "Queue": "Customer Projects",
       "OwnerID": 2,
       "Owner": "api.agent@example.invalid",
-      "ResponsibleID": 0,
-      "Responsible": "",
-      "CustomerID": "example-customer",
-      "CustomerUserID": "example-customer-user",
-      "CustomerUser": "example-customer-user",
-      "StateID": 4,
-      "State": "open",
-      "StateType": "open",
+      "ResponsibleID": 1,
+      "Responsible": "root@example.invalid",
+      "CustomerID": "example customer",
+      "CustomerUserID": "example-user",
+      "CustomerUser": "example-user",
+      "StateID": 1,
+      "State": "new",
+      "StateType": "new",
       "PriorityID": 3,
       "Priority": "3 normal",
       "TypeID": 1,
-      "Type": "Incident",
+      "Type": "Unclassified",
       "ServiceID": 0,
       "Service": "",
       "SLAID": 0,
       "SLA": "",
-      "Created": "2026-01-01 10:00:00",
-      "Changed": "2026-01-01 10:30:00",
+      "Created": "2026-06-23 16:44:53",
+      "Changed": "2026-06-23 16:44:55",
       "ArticleCount": 2,
-      "LastArticleID": 67890,
-      "LastArticleCreated": "2026-01-01 10:30:00",
-      "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
+      "LastArticleID": 340615,
+      "LastArticleCreated": "2026-06-23 16:44:54",
+      "SyncFingerprint": "sha256-hex-string"
     }
   ],
   "Count": 1,
+  "TotalCount": 137,
   "Limit": 50,
   "Offset": 0,
   "SortBy": "Created",
@@ -914,6 +961,7 @@ Combined filters:
     }
   ],
   "Count": 1,
+  "TotalCount": 1,
   "Limit": 5,
   "Offset": 0,
   "SortBy": "Created",
@@ -1030,7 +1078,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.2.8.opm
+/path/to/output/ZnunyAgentList-1.2.9.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1039,14 +1087,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.8.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.9.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.8.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.9.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

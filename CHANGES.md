@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.2.9 - Unreleased
+
+- Add `CountOnly=1` support to safe ticket search for total matching ticket counts.
+- Add `TotalCount` to normal safe ticket search responses.
+- Document count-only and paginated sync workflows for active ticket cache warmers.
+
 ## 1.2.8 - Unreleased
 
 - Fix safe ticket search filtering by `State` and `StateType`.

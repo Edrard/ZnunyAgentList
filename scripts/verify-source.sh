@@ -66,8 +66,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.8' ]; then
-        pass 'SOPM version is 1.2.8'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.9' ]; then
+        pass 'SOPM version is 1.2.9'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -307,6 +307,14 @@ if grep -Fq 'SearchLimit(' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Searc
     pass 'Ticket::Search enforces default limit 50 and max limit 100'
 else
     fail 'Ticket::Search default/max limit enforcement was not found'
+fi
+
+if grep -Fq "Result => 'COUNT'" "$ROOT/Kernel/GenericInterface/Operation/Ticket/Search.pm" \
+    && grep -Fq 'TotalCount' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Search.pm" \
+    && grep -Fq 'CountOnly' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Search.pm"; then
+    pass 'Ticket::Search supports native total counting and count-only responses'
+else
+    fail 'Ticket::Search total count support was not found'
 fi
 
 for WriteOperation in ArticleCreate Close Reopen; do
