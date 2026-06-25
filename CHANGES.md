@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.2.8 - Unreleased
+
+- Fix safe ticket search filtering by `State` and `StateType`.
+- Preserve exact `TicketNumber` safe search behavior.
+- Expand `Ticket::Search` README examples for state filters, pagination, sorting, and sync metadata.
+
 ## 1.2.7 - Unreleased
 
 - Extend safe ticket search responses with IDs and sync metadata for external synchronization.
