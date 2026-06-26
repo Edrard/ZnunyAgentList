@@ -66,8 +66,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.9' ]; then
-        pass 'SOPM version is 1.2.9'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.10' ]; then
+        pass 'SOPM version is 1.2.10'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -154,6 +154,8 @@ else
         'GenericInterface::Operation::Module###Ticket::ArticleCreate' \
         'GenericInterface::Operation::Module###Ticket::Close' \
         'GenericInterface::Operation::Module###Ticket::Reopen' \
+        'GenericInterface::Operation::Module###Ticket::Lock' \
+        'GenericInterface::Operation::Module###Ticket::Unlock' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Config' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Health'
     do
@@ -232,6 +234,8 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         'Ticket::ArticleCreate' \
         'Ticket::Close' \
         'Ticket::Reopen' \
+        'Ticket::Lock' \
+        'Ticket::Unlock' \
         'Ticket::ResolveTicketDefaults' \
         'Ticket::StateList' \
         'Ticket::PriorityList' \
@@ -268,6 +272,8 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/TicketArticle' \
         '/TicketClose' \
         '/TicketReopen' \
+        '/TicketLock' \
+        '/TicketUnlock' \
         '/ResolveTicketDefaults' \
         '/TicketState' \
         '/TicketPriority' \
@@ -317,7 +323,7 @@ else
     fail 'Ticket::Search total count support was not found'
 fi
 
-for WriteOperation in ArticleCreate Close Reopen; do
+for WriteOperation in ArticleCreate Close Reopen Lock Unlock; do
     WriteFile="$ROOT/Kernel/GenericInterface/Operation/Ticket/$WriteOperation.pm"
 
     if grep -Fq 'AuthenticateWriteAgent' "$WriteFile"; then
@@ -344,6 +350,23 @@ if grep -R -n -E 'Param\(.*(QueueID|Queue|OwnerID|Owner|PriorityID|Priority|Stat
     fail 'Close/Reopen expose generic TicketUpdate-style fields'
 else
     pass 'Close/Reopen do not expose generic TicketUpdate-style fields'
+fi
+
+if grep -E "Param\(.*'(Subject|Body|Kind|Reason|ArticleType|SenderType|HistoryType|HistoryComment|From|To|Cc|Bcc|MimeType|Charset)'" \
+    "$ROOT/Kernel/GenericInterface/Operation/Ticket/Lock.pm" \
+    "$ROOT/Kernel/GenericInterface/Operation/Ticket/Unlock.pm" >/dev/null 2>&1 \
+    || grep -Fq 'TicketArticleCreate' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Lock.pm" \
+    || grep -Fq 'TicketArticleCreate' "$ROOT/Kernel/GenericInterface/Operation/Ticket/Unlock.pm"; then
+    fail 'Lock/Unlock accept article parameters or create ticket articles'
+else
+    pass 'Lock/Unlock change lock state without article inputs or article creation'
+fi
+
+if grep -Fq 'LockID' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'Lock           => $Ticket{Lock}' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Safe ticket metadata includes LockID and Lock'
+else
+    fail 'Safe ticket metadata is missing LockID or Lock'
 fi
 
 while IFS= read -r OperationFile; do
@@ -418,7 +441,19 @@ else
     pass 'No obvious raw SQL found in operation files'
 fi
 
-WRITE_STYLE_CALLS=$(grep -R -n -E '\b(TicketCreate|TicketUpdate|TicketLockSet|TicketUnlock|SetPreferences|QueueUpdate|QueueAdd|CustomerUserAdd|CustomerUserUpdate|SLAAdd|SLAUpdate|ServiceAdd|ServiceUpdate|PriorityAdd|PriorityUpdate|StateAdd|StateUpdate|TypeAdd|TypeUpdate)\s*\(|DB->Do\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' || true)
+LOCK_SET_OUTSIDE_COMMON=$(grep -R -n -E '\bTicketLockSet\s*\(' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' \
+    | grep -Fv "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm:" || true)
+if [ -n "$LOCK_SET_OUTSIDE_COMMON" ]; then
+    fail 'TicketLockSet call found outside the controlled common helper'
+elif grep -Fq '$TicketObject->TicketLockSet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq "Lock     => 'lock'" "$ROOT/Kernel/GenericInterface/Operation/Ticket/Lock.pm" \
+    && grep -Fq "Lock     => 'unlock'" "$ROOT/Kernel/GenericInterface/Operation/Ticket/Unlock.pm"; then
+    pass 'TicketLockSet is confined to controlled lock/unlock operations'
+else
+    fail 'Controlled TicketLockSet implementation was not found'
+fi
+
+WRITE_STYLE_CALLS=$(grep -R -n -E '\b(TicketCreate|TicketUpdate|TicketUnlock|SetPreferences|QueueUpdate|QueueAdd|CustomerUserAdd|CustomerUserUpdate|SLAAdd|SLAUpdate|ServiceAdd|ServiceUpdate|PriorityAdd|PriorityUpdate|StateAdd|StateUpdate|TypeAdd|TypeUpdate)\s*\(|DB->Do\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' || true)
 if [ -n "$WRITE_STYLE_CALLS" ]; then
     fail 'Obvious write-style method call found in operation files'
 else

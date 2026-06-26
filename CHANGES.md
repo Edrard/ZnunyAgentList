@@ -1,5 +1,12 @@
 # ZnunyAgentList Changelog
 
+## 1.2.10 - Unreleased
+
+- Added safe `LockID` and `Lock` metadata to safe ticket lookup and search responses.
+- Added controlled `Ticket::Lock` and `Ticket::Unlock` operations.
+- Added REST routes `POST /TicketLock` and `POST /TicketUnlock`.
+- Documented that lock/unlock changes only lock state, creates no article, note, or reply, and does not expose generic `TicketUpdate`.
+
 ## 1.2.9 - Unreleased
 
 - Add `CountOnly=1` support to safe ticket search for total matching ticket counts.
