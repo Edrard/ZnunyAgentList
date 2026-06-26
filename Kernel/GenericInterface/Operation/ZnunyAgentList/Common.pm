@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.2.9';
+use constant PACKAGE_VERSION => '1.2.10';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -387,6 +387,8 @@ sub SafeTicketData {
         Owner          => $Ticket{Owner}                // q{},
         ResponsibleID  => 0 + ( $Ticket{ResponsibleID}  || 0 ),
         Responsible    => $Ticket{Responsible}          // q{},
+        LockID         => 0 + ( $Ticket{LockID}         || 0 ),
+        Lock           => $Ticket{Lock}                 // q{},
         CustomerID     => $Ticket{CustomerID}           // q{},
         CustomerUserID => $Ticket{CustomerUserID}       // q{},
         CustomerUser   => $Ticket{CustomerUser}         // q{},
@@ -634,6 +636,30 @@ sub TicketStateUpdate {
             TicketID => $Param{TicketID},
             State    => $Param{State},
             UserID   => $Param{UserID},
+        );
+    };
+
+    return $@ ? undef : $Success;
+}
+
+sub TicketLockUpdate {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+    my $UserID   = $Class->PositiveInt( $Param{UserID} );
+    my $Lock     = $Class->SafeString( $Param{Lock}, 16 );
+
+    return if !$TicketID || !$UserID;
+    return if $Lock ne 'lock' && $Lock ne 'unlock';
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    return if !$TicketObject;
+
+    my $Success = eval {
+        $TicketObject->TicketLockSet(
+            TicketID => $TicketID,
+            Lock     => $Lock,
+            UserID   => $UserID,
         );
     };
 

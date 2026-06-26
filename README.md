@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.2.9`.
+Current package version: `1.2.10`.
 
 The package provides a controlled REST surface for:
 
@@ -112,12 +112,16 @@ AutoResponseType
 `reply`. `Ticket::Close` and `Ticket::Reopen` use configured safe target states
 from SysConfig; they are not arbitrary caller-controlled state updates.
 
+`Ticket::Lock` and `Ticket::Unlock` use the same write authorization checks.
+They change only ticket lock state and do not create articles, notes, or replies.
+Znuny may still record its normal internal ticket history for these actions.
+
 ## What The Package Does Not Do
 
 - It does not create tickets.
 - It does not expose a custom unrestricted runtime `TicketUpdate` wrapper.
 - It does not modify queues, users, customer users, services, SLAs, states,
-  priorities, types, groups, roles, preferences, or database rows.
+  priorities, types, groups, roles, or preferences.
 - It does not use raw SQL.
 - It does not add database migrations.
 - It does not modify Znuny core files.
@@ -247,6 +251,8 @@ checks documented above.
 | `POST` | `/TicketArticle` | `Ticket::ArticleCreate` | Add a controlled internal note or reply | `TicketID` or `TicketNumber`, `Kind`, `Subject`, `Body` | `ArticleID`, `TicketID`, `TicketNumber`, `Warnings[]` |
 | `POST` | `/TicketClose` | `Ticket::Close` | Add a note and move ticket to configured close state | `TicketID` or `TicketNumber`, `Reason`, optional `Kind`, `Subject`, `Body` | `TicketID`, `TicketNumber`, `State`, `StateType`, `ArticleID` |
 | `POST` | `/TicketReopen` | `Ticket::Reopen` | Add a note and move ticket to configured reopen state | `TicketID` or `TicketNumber`, `Reason`, optional `Kind`, `Subject`, `Body` | `TicketID`, `TicketNumber`, `State`, `StateType`, `ArticleID` |
+| `POST` | `/TicketLock` | `Ticket::Lock` | Change only the ticket lock state to `lock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
+| `POST` | `/TicketUnlock` | `Ticket::Unlock` | Change only the ticket lock state to `unlock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
 
 Example `POST /TicketArticle` body:
 
@@ -282,6 +288,25 @@ Example `POST /TicketReopen` body:
   "Reason": "Problem reappeared in monitoring."
 }
 ```
+
+Example `POST /TicketLock` body:
+
+```json
+{
+  "TicketNumber": "2026062346000357"
+}
+```
+
+Example `POST /TicketUnlock` body:
+
+```json
+{
+  "TicketNumber": "2026062346000357"
+}
+```
+
+Lock/unlock accepts only ticket identity, does not require a reason, and does
+not expose generic unrestricted `TicketUpdate` fields.
 
 ## GenericTicketConnector Compatibility Routes
 
@@ -343,6 +368,9 @@ only the HTTP status code.
 Safe ticket metadata is explicitly allow-listed and does not expose full ticket
 or internal Perl object data. Typical safe ticket fields include:
 
+Safe ticket lookup and search responses include `LockID` and `Lock` so clients
+can display and synchronize the current ticket lock state.
+
 Depending on Znuny/GenericInterface serialization, numeric identifiers and
 counts such as `TicketID`, `QueueID`, `ArticleCount`, and `LastArticleID` may be
 returned as JSON numbers or JSON strings. Integrations should treat them as
@@ -360,6 +388,8 @@ required.
   "Owner": "api.agent@example.invalid",
   "ResponsibleID": "0",
   "Responsible": "",
+  "LockID": "1",
+  "Lock": "unlock",
   "CustomerID": "example-customer",
   "CustomerUserID": "example-customer-user",
   "CustomerUser": "example-customer-user",
@@ -421,7 +451,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.9",
+  "Version": "1.2.10",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -434,7 +464,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.9",
+  "Version": "1.2.10",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -444,6 +474,8 @@ GenericTicketConnector response shapes and are not documented in detail here.
     "TicketArticleCreate": 1,
     "TicketClose": 1,
     "TicketReopen": 1,
+    "TicketLock": 1,
+    "TicketUnlock": 1,
     "ValidateTicketCreate": 1
   }
 }
@@ -690,6 +722,8 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
     "Owner": "api.agent@example.invalid",
     "ResponsibleID": "0",
     "Responsible": "",
+    "LockID": "1",
+    "Lock": "unlock",
     "CustomerID": "example-customer",
     "CustomerUserID": "example-customer-user",
     "CustomerUser": "example-customer-user",
@@ -727,6 +761,8 @@ shape, including the article sync summary and `SyncFingerprint`, using
     "TicketNumber": "202601010000001",
     "QueueID": "10",
     "Queue": "Support",
+    "LockID": "1",
+    "Lock": "unlock",
     "ArticleCount": "2",
     "LastArticleID": "67890",
     "LastArticleCreated": "2026-01-01 10:30:00",
@@ -915,6 +951,8 @@ Example safe response:
       "Owner": "api.agent@example.invalid",
       "ResponsibleID": "1",
       "Responsible": "root@example.invalid",
+      "LockID": "1",
+      "Lock": "unlock",
       "CustomerID": "example customer",
       "CustomerUserID": "example-user",
       "CustomerUser": "example-user",
@@ -964,6 +1002,8 @@ Combined filters:
       "Owner": "api.agent@example.invalid",
       "ResponsibleID": "0",
       "Responsible": "",
+      "LockID": "2",
+      "Lock": "lock",
       "CustomerID": "example-customer",
       "CustomerUserID": "example-customer-user",
       "CustomerUser": "example-customer-user",
@@ -1044,6 +1084,42 @@ Combined filters:
 }
 ```
 
+`POST /TicketLock`
+
+```json
+{
+  "Ticket": {
+    "TicketID": "57250",
+    "TicketNumber": "2026062346000357",
+    "LockID": "2",
+    "Lock": "lock",
+    "State": "new",
+    "StateType": "new"
+  },
+  "Warnings": []
+}
+```
+
+`POST /TicketUnlock`
+
+```json
+{
+  "Ticket": {
+    "TicketID": "57250",
+    "TicketNumber": "2026062346000357",
+    "LockID": "1",
+    "Lock": "unlock",
+    "State": "new",
+    "StateType": "new"
+  },
+  "Warnings": []
+}
+```
+
+A Laravel integration can show **Lock / Take in work** when `Lock` is `unlock`,
+and **Unlock / Release** when `Lock` is `lock`. After either operation, refresh
+the safe ticket metadata or update the local cache.
+
 ### Error Responses
 
 Authentication or read authorization failure:
@@ -1100,7 +1176,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.2.9.opm
+/path/to/output/ZnunyAgentList-1.2.10.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1109,14 +1185,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.9.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.10.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.9.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.10.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

@@ -148,6 +148,28 @@
             </Hash>
         </Value>
     </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::Lock" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the controlled ticket lock operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Lock</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::Unlock" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the controlled ticket unlock operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">Unlock</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
     <Setting Name="GenericInterface::Operation::Module###Ticket::ResolveTicketDefaults" Required="0" Valid="1">
         <Description Translatable="1">GenericInterface operation module registration for the ticket defaults resolver operation.</Description>
         <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>

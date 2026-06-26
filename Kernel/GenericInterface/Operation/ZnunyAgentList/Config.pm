@@ -37,6 +37,8 @@ sub Run {
                 TicketArticleCreate   => 1,
                 TicketClose           => 1,
                 TicketReopen          => 1,
+                TicketLock            => 1,
+                TicketUnlock          => 1,
                 ResolveTicketDefaults => 1,
                 TicketStateList       => 1,
                 TicketPriorityList    => 1,
