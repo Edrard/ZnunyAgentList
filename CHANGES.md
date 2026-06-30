@@ -1,5 +1,13 @@
 # ZnunyAgentList Changelog
 
+## 1.2.11 - Unreleased
+
+- Added `Queue::AssignableAgents` for active agents with Znuny owner permission in a queue.
+- Added the non-mutating `Ticket::MoveAssignValidate` preflight operation.
+- Added controlled `Ticket::MoveAssign` queue and owner changes through standard Znuny APIs.
+- Required a note for owner changes while allowing queue-only changes without a note.
+- Kept the workflow free of raw SQL and any custom unrestricted runtime `TicketUpdate` operation.
+
 ## 1.2.10 - Unreleased
 
 - Added safe `LockID` and `Lock` metadata to safe ticket lookup and search responses.

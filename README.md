@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.2.10`.
+Current package version: `1.2.11`.
 
 The package provides a controlled REST surface for:
 
@@ -116,6 +116,12 @@ from SysConfig; they are not arbitrary caller-controlled state updates.
 They change only ticket lock state and do not create articles, notes, or replies.
 Znuny may still record its normal internal ticket history for these actions.
 
+`Ticket::MoveAssignValidate` and `Ticket::MoveAssign` use the same write
+authorization checks. They expose only queue and owner targets, prevalidate a
+combined queue/owner change before modifying the ticket, and use standard Znuny
+`TicketQueueSet()` and `TicketOwnerSet()` APIs. No raw SQL or custom unrestricted
+runtime `TicketUpdate` operation is used.
+
 ## What The Package Does Not Do
 
 - It does not create tickets.
@@ -209,6 +215,7 @@ operations.
 | `GET` | `/Queue` | `Queue::List` | List valid queues | none | `Queues[]` |
 | `GET` | `/Queue/:QueueID` | `Queue::Get` | Get queue by numeric ID | `QueueID` path parameter | `Queue.Found`, queue metadata |
 | `GET` | `/QueueByName/:Name` | `Queue::Get` | Get queue by name | `Name` path parameter | `Queue.Found`, queue metadata |
+| `GET` | `/Queue/:QueueID/AssignableAgents` | `Queue::AssignableAgents` | List active agents allowed to own tickets in a queue | `QueueID` path parameter | `Success`, `QueueID`, `QueueName`, `Agents[]`, `Errors[]` |
 | `GET` | `/CustomerUser?Search=...&Limit=...` | `CustomerUser::Search` | Search customer users | `Search`, optional `Limit` capped at `50` | `CustomerUsers[]`, optional `Warnings[]` |
 | `GET` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Get` | Get one customer user | `CustomerUserLogin` path parameter | `CustomerUser.Found`, safe customer fields |
 | `GET` | `/TicketState` | `Ticket::StateList` | List ticket states | none | `TicketStates[]` |
@@ -253,6 +260,8 @@ checks documented above.
 | `POST` | `/TicketReopen` | `Ticket::Reopen` | Add a note and move ticket to configured reopen state | `TicketID` or `TicketNumber`, `Reason`, optional `Kind`, `Subject`, `Body` | `TicketID`, `TicketNumber`, `State`, `StateType`, `ArticleID` |
 | `POST` | `/TicketLock` | `Ticket::Lock` | Change only the ticket lock state to `lock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
 | `POST` | `/TicketUnlock` | `Ticket::Unlock` | Change only the ticket lock state to `unlock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
+| `POST` | `/TicketMoveAssign/Validate` | `Ticket::MoveAssignValidate` | Validate a queue move and/or owner assignment without changing the ticket | `TicketID`, optional queue target, optional owner target, conditional `Note` | `Valid`, `RequiredNote`, `Current`, `Target`, `Errors[]`, `Warnings[]` |
+| `POST` | `/TicketMoveAssign` | `Ticket::MoveAssign` | Apply a prevalidated queue move and/or owner assignment | `TicketID`, optional queue target, optional owner target, conditional `Note` | `Success`, `QueueChanged`, `OwnerChanged`, `NoteCreated`, `Before`, `After`, `Errors[]`, `Warnings[]` |
 
 Example `POST /TicketArticle` body:
 
@@ -307,6 +316,41 @@ Example `POST /TicketUnlock` body:
 
 Lock/unlock accepts only ticket identity, does not require a reason, and does
 not expose generic unrestricted `TicketUpdate` fields.
+
+Example `POST /TicketMoveAssign/Validate` body:
+
+```json
+{
+  "TicketID": "57250",
+  "QueueID": "108",
+  "OwnerID": "30",
+  "Note": "Moving the ticket to the responsible engineer."
+}
+```
+
+Example `POST /TicketMoveAssign` body:
+
+```json
+{
+  "TicketID": "57250",
+  "QueueName": "Support::Projects",
+  "UserLogin": "assigned.agent",
+  "Note": "Assigning the ticket to the responsible engineer."
+}
+```
+
+`TicketID` is required. A queue target may be supplied as `QueueID` or
+`QueueName`, and an owner target as `OwnerID` or `UserLogin`. When both forms of
+one identity are supplied, the numeric ID is authoritative and a mismatch is
+reported as a warning. The ticket, queue, active owner, target queue owner
+permission, and move permission are checked before either mutation runs.
+
+Owner changes require a non-empty `Note`. Queue-only changes do not require a
+note. A queue-only change with a note creates one controlled internal note;
+owner changes pass the note to the standard Znuny owner-change API and do not
+create a duplicate article. Queue-plus-owner requests change the queue first and
+then the owner after all validation succeeds. Validation failures modify
+nothing.
 
 ## GenericTicketConnector Compatibility Routes
 
@@ -451,7 +495,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.10",
+  "Version": "1.2.11",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -464,10 +508,11 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.10",
+  "Version": "1.2.11",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
+    "QueueAssignableAgents": 1,
     "CustomerUserSearch": 1,
     "TicketGet": 1,
     "TicketSearch": 1,
@@ -476,6 +521,8 @@ GenericTicketConnector response shapes and are not documented in detail here.
     "TicketReopen": 1,
     "TicketLock": 1,
     "TicketUnlock": 1,
+    "TicketMoveAssignValidate": 1,
+    "TicketMoveAssign": 1,
     "ValidateTicketCreate": 1
   }
 }
@@ -527,6 +574,27 @@ GenericTicketConnector response shapes and are not documented in detail here.
   }
 }
 ```
+
+`GET /Queue/:QueueID/AssignableAgents`
+
+```json
+{
+  "Success": 1,
+  "QueueID": 49,
+  "QueueName": "Support::Projects",
+  "Agents": [
+    {
+      "UserID": 2,
+      "UserLogin": "assigned.agent",
+      "UserFullname": "Assigned Agent"
+    }
+  ],
+  "Errors": []
+}
+```
+
+The list contains only active users allowed by Znuny's queue owner permission
+logic and exposes only user ID, login, and formatted full name.
 
 ### Customer Users
 
@@ -1116,6 +1184,65 @@ Combined filters:
 }
 ```
 
+`POST /TicketMoveAssign/Validate`
+
+```json
+{
+  "Valid": 1,
+  "RequiredNote": 1,
+  "Current": {
+    "QueueID": 49,
+    "QueueName": "Support",
+    "OwnerID": 2,
+    "OwnerLogin": "current.agent",
+    "OwnerFullname": "Current Agent"
+  },
+  "Target": {
+    "QueueID": 108,
+    "QueueName": "Support::Projects",
+    "OwnerID": 30,
+    "OwnerLogin": "assigned.agent",
+    "OwnerFullname": "Assigned Agent"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+`POST /TicketMoveAssign`
+
+```json
+{
+  "Success": 1,
+  "TicketID": 57250,
+  "TicketNumber": "2026062346000357",
+  "QueueChanged": 1,
+  "OwnerChanged": 1,
+  "NoteCreated": 0,
+  "Before": {
+    "QueueID": 49,
+    "QueueName": "Support",
+    "OwnerID": 2,
+    "OwnerLogin": "current.agent",
+    "OwnerFullname": "Current Agent"
+  },
+  "After": {
+    "QueueID": 108,
+    "QueueName": "Support::Projects",
+    "OwnerID": 30,
+    "OwnerLogin": "assigned.agent",
+    "OwnerFullname": "Assigned Agent"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+A Laravel integration can load `/Queue/{QueueID}/AssignableAgents` after queue
+selection, call `/TicketMoveAssign/Validate` before enabling or confirming
+submit, then call `/TicketMoveAssign` and refresh safe ticket metadata or its
+local cache after success.
+
 A Laravel integration can show **Lock / Take in work** when `Lock` is `unlock`,
 and **Unlock / Release** when `Lock` is `lock`. After either operation, refresh
 the safe ticket metadata or update the local cache.
@@ -1176,7 +1303,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.2.10.opm
+/path/to/output/ZnunyAgentList-1.2.11.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1185,14 +1312,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.10.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.11.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.10.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.11.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

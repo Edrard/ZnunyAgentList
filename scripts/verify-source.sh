@@ -66,8 +66,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.10' ]; then
-        pass 'SOPM version is 1.2.10'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.11' ]; then
+        pass 'SOPM version is 1.2.11'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -156,6 +156,9 @@ else
         'GenericInterface::Operation::Module###Ticket::Reopen' \
         'GenericInterface::Operation::Module###Ticket::Lock' \
         'GenericInterface::Operation::Module###Ticket::Unlock' \
+        'GenericInterface::Operation::Module###Queue::AssignableAgents' \
+        'GenericInterface::Operation::Module###Ticket::MoveAssignValidate' \
+        'GenericInterface::Operation::Module###Ticket::MoveAssign' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Config' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Health'
     do
@@ -227,6 +230,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         'User::AgentList' \
         'Queue::List' \
         'Queue::Get' \
+        'Queue::AssignableAgents' \
         'CustomerUser::Search' \
         'CustomerUser::Get' \
         'Ticket::Search' \
@@ -236,6 +240,8 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         'Ticket::Reopen' \
         'Ticket::Lock' \
         'Ticket::Unlock' \
+        'Ticket::MoveAssignValidate' \
+        'Ticket::MoveAssign' \
         'Ticket::ResolveTicketDefaults' \
         'Ticket::StateList' \
         'Ticket::PriorityList' \
@@ -246,7 +252,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         'ZnunyAgentList::Config' \
         'ZnunyAgentList::Health'
     do
-        if grep -Fq "Type: $OperationType" "$WEBSERVICE_YAML"; then
+        if grep -Eq "^[[:space:]]*Type:[[:space:]]*$OperationType[[:space:]]*$" "$WEBSERVICE_YAML"; then
             pass "Web Service template contains operation: $OperationType"
         else
             fail "Web Service template is missing operation: $OperationType"
@@ -264,6 +270,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/Queue' \
         '/Queue/:QueueID' \
         '/QueueByName/:Name' \
+        '/Queue/:QueueID/AssignableAgents' \
         '/CustomerUser' \
         '/CustomerUser/:CustomerUserLogin' \
         '/ZnunyAgentListTicketSearch' \
@@ -274,6 +281,8 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/TicketReopen' \
         '/TicketLock' \
         '/TicketUnlock' \
+        '/TicketMoveAssign/Validate' \
+        '/TicketMoveAssign' \
         '/ResolveTicketDefaults' \
         '/TicketState' \
         '/TicketPriority' \
@@ -284,7 +293,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/SystemConfig' \
         '/Health'
     do
-        if grep -Fq "Route: $Route" "$WEBSERVICE_YAML"; then
+        if grep -Eq "^[[:space:]]*Route:[[:space:]]*$Route[[:space:]]*$" "$WEBSERVICE_YAML"; then
             pass "Web Service template contains route: $Route"
         else
             fail "Web Service template is missing route: $Route"
@@ -323,7 +332,7 @@ else
     fail 'Ticket::Search total count support was not found'
 fi
 
-for WriteOperation in ArticleCreate Close Reopen Lock Unlock; do
+for WriteOperation in ArticleCreate Close Reopen Lock Unlock MoveAssignValidate MoveAssign; do
     WriteFile="$ROOT/Kernel/GenericInterface/Operation/Ticket/$WriteOperation.pm"
 
     if grep -Fq 'AuthenticateWriteAgent' "$WriteFile"; then
@@ -350,6 +359,22 @@ if grep -R -n -E 'Param\(.*(QueueID|Queue|OwnerID|Owner|PriorityID|Priority|Stat
     fail 'Close/Reopen expose generic TicketUpdate-style fields'
 else
     pass 'Close/Reopen do not expose generic TicketUpdate-style fields'
+fi
+
+if grep -Fq 'MoveAssignValidation(' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    && grep -Fq 'MoveAssignValidation(' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
+    && grep -Fq 'TicketQueueMoveAllowed(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'OwnerCanOwnQueue(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Move/assign validate and execute operations share permission-aware preflight validation'
+else
+    fail 'Controlled move/assign shared validation was not found'
+fi
+
+if grep -Fq 'AuthenticateReadAgent' "$ROOT/Kernel/GenericInterface/Operation/Queue/AssignableAgents.pm" \
+    && grep -Fq "Type    => 'owner'" "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Assignable agents use read authorization and Znuny owner permission logic'
+else
+    fail 'Assignable agent authorization or owner permission logic was not found'
 fi
 
 if grep -E "Param\(.*'(Subject|Body|Kind|Reason|ArticleType|SenderType|HistoryType|HistoryComment|From|To|Cc|Bcc|MimeType|Charset)'" \
@@ -451,6 +476,19 @@ elif grep -Fq '$TicketObject->TicketLockSet(' "$ROOT/Kernel/GenericInterface/Ope
     pass 'TicketLockSet is confined to controlled lock/unlock operations'
 else
     fail 'Controlled TicketLockSet implementation was not found'
+fi
+
+QUEUE_SET_OUTSIDE_COMMON=$(grep -R -n -E '\bTicketQueueSet\s*\(' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' \
+    | grep -Fv "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm:" || true)
+OWNER_SET_OUTSIDE_COMMON=$(grep -R -n -E '\bTicketOwnerSet\s*\(' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' \
+    | grep -Fv "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm:" || true)
+if [ -n "$QUEUE_SET_OUTSIDE_COMMON" ] || [ -n "$OWNER_SET_OUTSIDE_COMMON" ]; then
+    fail 'TicketQueueSet or TicketOwnerSet call found outside the controlled common helper'
+elif grep -Fq '$TicketObject->TicketQueueSet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq '$TicketObject->TicketOwnerSet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'TicketQueueSet and TicketOwnerSet are confined to the controlled common helper'
+else
+    fail 'Controlled TicketQueueSet or TicketOwnerSet implementation was not found'
 fi
 
 WRITE_STYLE_CALLS=$(grep -R -n -E '\b(TicketCreate|TicketUpdate|TicketUnlock|SetPreferences|QueueUpdate|QueueAdd|CustomerUserAdd|CustomerUserUpdate|SLAAdd|SLAUpdate|ServiceAdd|ServiceUpdate|PriorityAdd|PriorityUpdate|StateAdd|StateUpdate|TypeAdd|TypeUpdate)\s*\(|DB->Do\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' || true)

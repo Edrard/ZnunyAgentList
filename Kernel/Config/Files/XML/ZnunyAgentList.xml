@@ -93,6 +93,17 @@
             </Hash>
         </Value>
     </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Queue::AssignableAgents" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only assignable agent list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">AssignableAgents</Item>
+                <Item Key="Controller">Queue</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
     <Setting Name="GenericInterface::Operation::Module###Ticket::Get" Required="0" Valid="1">
         <Description Translatable="1">GenericInterface operation module registration for the safe read-only ticket get operation.</Description>
         <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
@@ -165,6 +176,28 @@
         <Value>
             <Hash>
                 <Item Key="Name">Unlock</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::MoveAssignValidate" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for controlled ticket move and owner assignment validation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">MoveAssignValidate</Item>
+                <Item Key="Controller">Ticket</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
+    <Setting Name="GenericInterface::Operation::Module###Ticket::MoveAssign" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the controlled ticket move and owner assignment operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">MoveAssign</Item>
                 <Item Key="Controller">Ticket</Item>
                 <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
             </Hash>
