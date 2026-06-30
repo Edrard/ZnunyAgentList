@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.2.10';
+use constant PACKAGE_VERSION => '1.2.11';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -660,6 +660,385 @@ sub TicketLockUpdate {
             TicketID => $TicketID,
             Lock     => $Lock,
             UserID   => $UserID,
+        );
+    };
+
+    return $@ ? undef : $Success;
+}
+
+sub QueueData {
+    my ( $Class, %Param ) = @_;
+
+    my $QueueID   = $Class->PositiveInt( $Param{QueueID} );
+    my $QueueName = $Class->SafeString( $Param{QueueName}, 255 );
+    return if !$QueueID && $QueueName eq q{};
+
+    my $QueueObject = eval { $Kernel::OM->Get('Kernel::System::Queue') };
+    return if !$QueueObject;
+
+    my %Queue = eval {
+        $QueueID
+            ? $QueueObject->QueueGet( ID => $QueueID )
+            : $QueueObject->QueueGet( Name => $QueueName );
+    };
+    return if $@ || !$Queue{QueueID} || !$Queue{Name};
+    return if $Queue{ValidID} && $Queue{ValidID} != 1;
+
+    my $GroupID = $Class->PositiveInt( $Queue{GroupID} );
+    if ( !$GroupID ) {
+        $GroupID = eval { $QueueObject->GetQueueGroupID( QueueID => $Queue{QueueID} ) };
+    }
+
+    return {
+        QueueID   => 0 + $Queue{QueueID},
+        QueueName => $Queue{Name} // q{},
+        GroupID   => 0 + ( $GroupID || 0 ),
+    };
+}
+
+sub OwnerData {
+    my ( $Class, %Param ) = @_;
+
+    my $OwnerID   = $Class->PositiveInt( $Param{OwnerID} );
+    my $UserLogin = $Class->SafeString( $Param{UserLogin}, 255 );
+    return if !$OwnerID && $UserLogin eq q{};
+
+    my $UserObject = eval { $Kernel::OM->Get('Kernel::System::User') };
+    return if !$UserObject;
+
+    if ( !$OwnerID ) {
+        $OwnerID = eval {
+            $UserObject->UserLookup(
+                UserLogin => $UserLogin,
+                Silent    => 1,
+            );
+        };
+    }
+    return if $@ || !$OwnerID;
+
+    my %ActiveUsers = eval {
+        $UserObject->UserList(
+            Type          => 'Short',
+            Valid         => 1,
+            NoOutOfOffice => 1,
+        );
+    };
+    return if $@ || !exists $ActiveUsers{$OwnerID};
+
+    my %FullNames = eval {
+        $UserObject->UserList(
+            Type          => 'Long',
+            Valid         => 1,
+            NoOutOfOffice => 1,
+        );
+    };
+    return if $@;
+
+    my %UserData = eval { $UserObject->GetUserData( UserID => $OwnerID ) };
+    return if $@ || !$UserData{UserID} || !$UserData{UserLogin};
+
+    return {
+        OwnerID       => 0 + $UserData{UserID},
+        OwnerLogin    => $UserData{UserLogin},
+        OwnerFullname => $FullNames{$OwnerID} // q{},
+    };
+}
+
+sub AssignableAgents {
+    my ( $Class, %Param ) = @_;
+
+    my $Queue = $Class->QueueData( QueueID => $Param{QueueID} );
+    return if !$Queue || !$Queue->{GroupID};
+
+    my $UserObject   = eval { $Kernel::OM->Get('Kernel::System::User') };
+    my $GroupObject  = eval { $Kernel::OM->Get('Kernel::System::Group') };
+    my $ConfigObject = eval { $Kernel::OM->Get('Kernel::Config') };
+    return if !$UserObject || !$GroupObject || !$ConfigObject;
+
+    my %ActiveLogins = eval {
+        $UserObject->UserList(
+            Type          => 'Short',
+            Valid         => 1,
+            NoOutOfOffice => 1,
+        );
+    };
+    return if $@;
+
+    my %FullNames = eval {
+        $UserObject->UserList(
+            Type          => 'Long',
+            Valid         => 1,
+            NoOutOfOffice => 1,
+        );
+    };
+    return if $@;
+
+    # Mirror the owner selector used by Znuny's core ticket action screens.
+    my %PermittedUsers;
+    if ( $ConfigObject->Get('Ticket::ChangeOwnerToEveryone') ) {
+        %PermittedUsers = %ActiveLogins;
+    }
+    else {
+        %PermittedUsers = eval {
+            $GroupObject->PermissionGroupGet(
+                GroupID => $Queue->{GroupID},
+                Type    => 'owner',
+            );
+        };
+        return if $@;
+    }
+
+    my @Agents;
+    for my $UserID ( sort { $a <=> $b } keys %PermittedUsers ) {
+        next if !exists $ActiveLogins{$UserID};
+
+        push @Agents, {
+            UserID       => 0 + $UserID,
+            UserLogin    => $ActiveLogins{$UserID} // q{},
+            UserFullname => $FullNames{$UserID} // q{},
+        };
+    }
+
+    @Agents = sort {
+        lc( $a->{UserFullname} // q{} ) cmp lc( $b->{UserFullname} // q{} )
+            || lc( $a->{UserLogin} // q{} ) cmp lc( $b->{UserLogin} // q{} )
+            || ( $a->{UserID} || 0 ) <=> ( $b->{UserID} || 0 )
+    } @Agents;
+
+    return ( $Queue, \@Agents );
+}
+
+sub OwnerCanOwnQueue {
+    my ( $Class, %Param ) = @_;
+
+    my $OwnerID = $Class->PositiveInt( $Param{OwnerID} );
+    my $QueueID = $Class->PositiveInt( $Param{QueueID} );
+    return 0 if !$OwnerID || !$QueueID;
+
+    my ( $Queue, $Agents ) = $Class->AssignableAgents( QueueID => $QueueID );
+    return 0 if !$Queue || ref $Agents ne 'ARRAY';
+
+    return scalar grep { $_->{UserID} == $OwnerID } @{$Agents};
+}
+
+sub TicketAssignmentSnapshot {
+    my ( $Class, %Param ) = @_;
+
+    my $Ticket = $Param{Ticket};
+    return if ref $Ticket ne 'HASH' || !$Ticket->{TicketID};
+
+    my $OwnerFullname = q{};
+    my $UserObject = eval { $Kernel::OM->Get('Kernel::System::User') };
+    if ($UserObject) {
+        my %FullNames = eval {
+            $UserObject->UserList(
+                Type          => 'Long',
+                Valid         => 0,
+                NoOutOfOffice => 1,
+            );
+        };
+        $OwnerFullname = $FullNames{ $Ticket->{OwnerID} } // q{} if !$@;
+    }
+
+    return {
+        QueueID       => 0 + ( $Ticket->{QueueID} || 0 ),
+        QueueName     => $Ticket->{Queue} // q{},
+        OwnerID       => 0 + ( $Ticket->{OwnerID} || 0 ),
+        OwnerLogin    => $Ticket->{Owner} // q{},
+        OwnerFullname => $OwnerFullname,
+    };
+}
+
+sub TicketQueueMoveAllowed {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+    my $QueueID  = $Class->PositiveInt( $Param{QueueID} );
+    my $UserID   = $Class->PositiveInt( $Param{UserID} );
+    return 0 if !$TicketID || !$QueueID || !$UserID;
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    return 0 if !$TicketObject;
+
+    my %MoveList = eval {
+        $TicketObject->MoveList(
+            TicketID => $TicketID,
+            UserID   => $UserID,
+            Type     => 'move_into',
+        );
+    };
+
+    return $@ ? 0 : ( $MoveList{$QueueID} ? 1 : 0 );
+}
+
+sub MoveAssignValidation {
+    my ( $Class, %Param ) = @_;
+
+    my @Errors;
+    my @Warnings;
+
+    my $TicketID     = $Class->PositiveInt( $Param{TicketID} );
+    my $UserID       = $Class->PositiveInt( $Param{UserID} );
+    my $RawQueueID   = $Class->SafeString( $Param{QueueID}, 32 );
+    my $RawQueueName = $Class->SafeString( $Param{QueueName}, 255 );
+    my $RawOwnerID   = $Class->SafeString( $Param{OwnerID}, 32 );
+    my $RawUserLogin = $Class->SafeString( $Param{UserLogin}, 255 );
+    my $Note         = $Class->SafeString( $Param{Note}, 4000 );
+
+    push @Errors, 'TicketID is required and must be a positive integer.' if !$TicketID;
+    push @Errors, 'QueueID must be a positive integer.' if $RawQueueID ne q{} && !$Class->PositiveInt($RawQueueID);
+    push @Errors, 'OwnerID must be a positive integer.' if $RawOwnerID ne q{} && !$Class->PositiveInt($RawOwnerID);
+
+    my $QueueRequested = $RawQueueID ne q{} || $RawQueueName ne q{};
+    my $OwnerRequested = $RawOwnerID ne q{} || $RawUserLogin ne q{};
+    push @Errors, 'QueueID or QueueName, or OwnerID or UserLogin, is required.' if !$QueueRequested && !$OwnerRequested;
+
+    my $Ticket;
+    if ( $TicketID && $UserID ) {
+        $Ticket = $Class->TicketLookup(
+            TicketID => $TicketID,
+            UserID   => $UserID,
+        );
+        push @Errors, 'Ticket not found.' if !$Ticket;
+    }
+
+    my $Current = $Ticket ? $Class->TicketAssignmentSnapshot( Ticket => $Ticket ) : undef;
+    my $TargetQueue;
+    my $TargetOwner;
+
+    if ($Ticket) {
+        if ($QueueRequested) {
+            $TargetQueue = $RawQueueID ne q{}
+                ? $Class->QueueData( QueueID => $RawQueueID )
+                : $Class->QueueData( QueueName => $RawQueueName );
+            push @Errors, 'Target queue not found or is not valid.' if !$TargetQueue;
+
+            if ( $TargetQueue && $RawQueueID ne q{} && $RawQueueName ne q{} && $TargetQueue->{QueueName} ne $RawQueueName ) {
+                push @Warnings, 'QueueName does not match QueueID; QueueID was used.';
+            }
+        }
+        else {
+            $TargetQueue = $Class->QueueData( QueueID => $Current->{QueueID} );
+            push @Errors, 'Current ticket queue could not be resolved.' if !$TargetQueue;
+        }
+
+        if ($OwnerRequested) {
+            $TargetOwner = $RawOwnerID ne q{}
+                ? $Class->OwnerData( OwnerID => $RawOwnerID )
+                : $Class->OwnerData( UserLogin => $RawUserLogin );
+            push @Errors, 'Target owner not found or is not active.' if !$TargetOwner;
+
+            if ( $TargetOwner && $RawOwnerID ne q{} && $RawUserLogin ne q{} && $TargetOwner->{OwnerLogin} ne $RawUserLogin ) {
+                push @Warnings, 'UserLogin does not match OwnerID; OwnerID was used.';
+            }
+        }
+        else {
+            $TargetOwner = {
+                OwnerID       => $Current->{OwnerID},
+                OwnerLogin    => $Current->{OwnerLogin},
+                OwnerFullname => $Current->{OwnerFullname},
+            };
+        }
+    }
+
+    my $QueueChanged = $Current && $TargetQueue
+        ? ( $Current->{QueueID} != $TargetQueue->{QueueID} ? 1 : 0 )
+        : 0;
+    my $OwnerChanged = $Current && $TargetOwner
+        ? ( $Current->{OwnerID} != $TargetOwner->{OwnerID} ? 1 : 0 )
+        : 0;
+    my $RequiredNote = $OwnerChanged ? 1 : 0;
+
+    if ( $QueueChanged && !$Class->TicketQueueMoveAllowed(
+        TicketID => $TicketID,
+        QueueID  => $TargetQueue->{QueueID},
+        UserID   => $UserID,
+        )
+        )
+    {
+        push @Errors, 'Authenticated agent cannot move the ticket into the target queue.';
+    }
+
+    if ( $OwnerRequested && $TargetOwner && $TargetQueue && !$Class->OwnerCanOwnQueue(
+        OwnerID => $TargetOwner->{OwnerID},
+        QueueID => $TargetQueue->{QueueID},
+        )
+        )
+    {
+        push @Errors, 'Target owner does not have permission for target queue.';
+    }
+
+    push @Errors, 'Note is required when owner changes.' if $RequiredNote && $Note eq q{};
+
+    if ( $Ticket && !$QueueChanged && !$OwnerChanged ) {
+        push @Warnings, 'Requested queue and owner already match the ticket.';
+        push @Errors, 'No queue or owner change would be made.';
+    }
+
+    my $Target = $TargetQueue && $TargetOwner
+        ? {
+            QueueID       => $TargetQueue->{QueueID},
+            QueueName     => $TargetQueue->{QueueName},
+            OwnerID       => $TargetOwner->{OwnerID},
+            OwnerLogin    => $TargetOwner->{OwnerLogin},
+            OwnerFullname => $TargetOwner->{OwnerFullname},
+        }
+        : undef;
+
+    return {
+        Valid         => @Errors ? 0 : 1,
+        RequiredNote  => $RequiredNote,
+        Current       => $Current,
+        Target        => $Target,
+        Errors        => \@Errors,
+        Warnings      => \@Warnings,
+        QueueChanged  => $QueueChanged,
+        OwnerChanged  => $OwnerChanged,
+        Note          => $Note,
+        Ticket        => $Ticket,
+    };
+}
+
+sub TicketQueueUpdate {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+    my $QueueID  = $Class->PositiveInt( $Param{QueueID} );
+    my $UserID   = $Class->PositiveInt( $Param{UserID} );
+    return if !$TicketID || !$QueueID || !$UserID;
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    return if !$TicketObject;
+
+    my $Success = eval {
+        $TicketObject->TicketQueueSet(
+            TicketID => $TicketID,
+            QueueID  => $QueueID,
+            UserID   => $UserID,
+        );
+    };
+
+    return $@ ? undef : $Success;
+}
+
+sub TicketOwnerUpdate {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+    my $OwnerID  = $Class->PositiveInt( $Param{OwnerID} );
+    my $UserID   = $Class->PositiveInt( $Param{UserID} );
+    my $Comment  = $Class->SafeString( $Param{Comment}, 4000 );
+    return if !$TicketID || !$OwnerID || !$UserID;
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    return if !$TicketObject;
+
+    my $Success = eval {
+        $TicketObject->TicketOwnerSet(
+            TicketID  => $TicketID,
+            NewUserID => $OwnerID,
+            UserID    => $UserID,
+            Comment   => $Comment,
         );
     };
 
