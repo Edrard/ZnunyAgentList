@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.4.0`.
+Current package version: `1.4.1`.
 
 The package provides a controlled REST surface for:
 
@@ -349,7 +349,10 @@ as `CustomerUserID`. The customer user must exist and be active; its
 a consistency check and must match that derived value. `CustomerID`-only changes
 are rejected. When both queue or owner identity forms are supplied, the numeric
 ID is authoritative and a mismatch is reported as a warning. All targets and
-permissions are checked before any mutation runs.
+permissions are checked before any mutation runs. Whenever the queue or owner
+changes, validation confirms that the resolved target owner is assignable in
+the resolved target queue; this includes queue-only changes that retain the
+current owner.
 
 Omitted queue, owner, or customer targets retain their current values in
 `Target`. The current queue is also used for owner permission validation when no
@@ -511,7 +514,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.4.0",
+  "Version": "1.4.1",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -524,7 +527,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.4.0",
+  "Version": "1.4.1",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -1341,7 +1344,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.4.0.opm
+/path/to/output/ZnunyAgentList-1.4.1.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1350,14 +1353,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.4.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.4.1.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.4.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.4.1.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

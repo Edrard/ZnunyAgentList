@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.4.0';
+use constant PACKAGE_VERSION => '1.4.1';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -1043,13 +1043,13 @@ sub MoveAssignValidation {
         push @Errors, 'Authenticated agent cannot move the ticket into the target queue.';
     }
 
-    if ( $OwnerRequested && $TargetOwner && $TargetQueue && !$Class->OwnerCanOwnQueue(
+    if ( ( $QueueChanged || $OwnerChanged ) && $TargetOwner && $TargetQueue && !$Class->OwnerCanOwnQueue(
         OwnerID => $TargetOwner->{OwnerID},
         QueueID => $TargetQueue->{QueueID},
         )
         )
     {
-        push @Errors, 'Target owner does not have permission for target queue.';
+        push @Errors, 'Target owner is not assignable in target queue.';
     }
 
     push @Errors, 'Note is required when owner changes.' if $RequiredNote && $Note eq q{};

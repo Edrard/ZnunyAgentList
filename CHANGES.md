@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.4.1 - Unreleased
+
+- Fixed queue-only validation to reject moves when the current owner is not assignable in the target queue.
+- Kept execute on the same shared target owner/queue permission validation before mutation.
+- Preserved the `1.4.0` customer reassignment behavior without changing endpoint names.
+
 ## 1.4.0 - Unreleased
 
 - Extended `TicketMoveAssign` with controlled customer reassignment through `CustomerUserID`.
