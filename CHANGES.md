@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.5.0 - Unreleased
+
+- Added `GET /Agent/{UserID}/AssignableQueues` as the reverse lookup for `GET /Queue/{QueueID}/AssignableAgents`.
+- Returns only valid queues where the selected active agent may own tickets.
+- Uses standard Znuny owner group permissions without raw SQL or write authorization.
+
 ## 1.4.1 - Unreleased
 
 - Fixed queue-only validation to reject moves when the current owner is not assignable in the target queue.
