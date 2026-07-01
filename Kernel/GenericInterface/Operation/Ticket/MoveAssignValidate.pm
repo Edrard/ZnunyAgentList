@@ -21,13 +21,20 @@ sub Run {
         return $AuthError;
     }
 
+    my $RawTicketID  = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketID' );
+    my $RawQueueID   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' );
+    my $RawQueueName = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueName' );
+    my $RawOwnerID   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' );
+    my $RawUserLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'UserLogin' );
+    my $RawNote      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Note' );
+
     my $Validation = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->MoveAssignValidation(
-        TicketID  => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketID' ),
-        QueueID   => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' ),
-        QueueName => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueName' ),
-        OwnerID   => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' ),
-        UserLogin => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'UserLogin' ),
-        Note      => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Note' ),
+        TicketID  => $RawTicketID,
+        QueueID   => $RawQueueID,
+        QueueName => $RawQueueName,
+        OwnerID   => $RawOwnerID,
+        UserLogin => $RawUserLogin,
+        Note      => $RawNote,
         UserID    => $UserID,
     );
 

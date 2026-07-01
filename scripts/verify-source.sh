@@ -66,8 +66,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.2.11' ]; then
-        pass 'SOPM version is 1.2.11'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.3.0' ]; then
+        pass 'SOPM version is 1.3.0'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -368,6 +368,17 @@ if grep -Fq 'MoveAssignValidation(' "$ROOT/Kernel/GenericInterface/Operation/Tic
     pass 'Move/assign validate and execute operations share permission-aware preflight validation'
 else
     fail 'Controlled move/assign shared validation was not found'
+fi
+
+INLINE_MOVE_ASSIGN_PARAM=$(grep -n -E '=>.*ZnunyAgentList::Common->Param\(' \
+    "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" || true)
+if [ -z "$INLINE_MOVE_ASSIGN_PARAM" ] \
+    && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm"; then
+    pass 'Move/assign request parameters are captured in scalar context before target resolution'
+else
+    fail 'Move/assign request parameter list can collapse when an optional value is absent'
 fi
 
 if grep -Fq 'AuthenticateReadAgent' "$ROOT/Kernel/GenericInterface/Operation/Queue/AssignableAgents.pm" \
