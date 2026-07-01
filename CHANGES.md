@@ -1,5 +1,13 @@
 # ZnunyAgentList Changelog
 
+## 1.3.2 - Unreleased
+
+- Fixed authentication `UserLogin` being treated as a move/assign target owner.
+- Replaced target owner login input `UserLogin` with `OwnerLogin`.
+- Kept the current owner for queue-only validation and execution without calling `TicketOwnerSet`.
+- Made TicketID-only validation fail as no target change requested instead of requiring an owner note.
+- Bumped the package version so Znuny can perform a clean package upgrade.
+
 ## 1.3.1 - Unreleased
 
 - Fixed queue-only validation treating authentication `UserLogin` as a target owner.

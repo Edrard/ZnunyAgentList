@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.3.1`.
+Current package version: `1.3.2`.
 
 The package provides a controlled REST surface for:
 
@@ -260,8 +260,8 @@ checks documented above.
 | `POST` | `/TicketReopen` | `Ticket::Reopen` | Add a note and move ticket to configured reopen state | `TicketID` or `TicketNumber`, `Reason`, optional `Kind`, `Subject`, `Body` | `TicketID`, `TicketNumber`, `State`, `StateType`, `ArticleID` |
 | `POST` | `/TicketLock` | `Ticket::Lock` | Change only the ticket lock state to `lock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
 | `POST` | `/TicketUnlock` | `Ticket::Unlock` | Change only the ticket lock state to `unlock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
-| `POST` | `/TicketMoveAssign/Validate` | `Ticket::MoveAssignValidate` | Validate a queue move and/or owner assignment without changing the ticket | `TicketID`, optional queue target, optional owner target, conditional `Note` | `Valid`, `RequiredNote`, `Current`, `Target`, `Errors[]`, `Warnings[]` |
-| `POST` | `/TicketMoveAssign` | `Ticket::MoveAssign` | Apply a prevalidated queue move and/or owner assignment | `TicketID`, optional queue target, optional owner target, conditional `Note` | `Success`, `QueueChanged`, `OwnerChanged`, `NoteCreated`, `Before`, `After`, `Errors[]`, `Warnings[]` |
+| `POST` | `/TicketMoveAssign/Validate` | `Ticket::MoveAssignValidate` | Validate a queue move and/or owner assignment without changing the ticket | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, conditional `Note` | `Valid`, `RequiredNote`, `Current`, `Target`, `Errors[]`, `Warnings[]` |
+| `POST` | `/TicketMoveAssign` | `Ticket::MoveAssign` | Apply a prevalidated queue move and/or owner assignment | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, conditional `Note` | `Success`, `QueueChanged`, `OwnerChanged`, `NoteCreated`, `Before`, `After`, `Errors[]`, `Warnings[]` |
 
 Example `POST /TicketArticle` body:
 
@@ -334,13 +334,13 @@ Example `POST /TicketMoveAssign` body:
 {
   "TicketID": "57250",
   "QueueName": "Support::Projects",
-  "UserLogin": "assigned.agent",
+  "OwnerLogin": "assigned.agent",
   "Note": "Assigning the ticket to the responsible engineer."
 }
 ```
 
 `TicketID` is required. A queue target may be supplied as `QueueID` or
-`QueueName`, and an owner target as `OwnerID` or `UserLogin`. When both forms of
+`QueueName`, and an owner target as `OwnerID` or `OwnerLogin`. When both forms of
 one identity are supplied, the numeric ID is authoritative and a mismatch is
 reported as a warning. The ticket, queue, active owner, target queue owner
 permission, and move permission are checked before either mutation runs.
@@ -348,9 +348,9 @@ permission, and move permission are checked before either mutation runs.
 Queue fields are optional for owner-only changes; when omitted, the current
 ticket queue becomes the target queue for owner permission validation. Owner
 fields are optional for queue-only changes; when omitted, the current owner is
-preserved in the `Target` snapshot. Target-owner `UserLogin` is read only from
-the JSON request body; the GenericInterface authentication query parameter
-`UserLogin` is never treated as a target owner. Validation returns populated
+preserved in the `Target` snapshot. `UserLogin` is reserved for GenericInterface
+authentication and is never accepted as a target owner; login-based owner
+selection must use `OwnerLogin`. Validation returns populated
 `Current` data once the ticket is resolved and populated `Target` data once both
 target values can be resolved, including when a later validation rule fails.
 
@@ -504,7 +504,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.3.1",
+  "Version": "1.3.2",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -517,7 +517,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.3.1",
+  "Version": "1.3.2",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -1312,7 +1312,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.3.1.opm
+/path/to/output/ZnunyAgentList-1.3.2.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1321,14 +1321,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.3.1.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.3.2.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.3.1.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.3.2.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:
