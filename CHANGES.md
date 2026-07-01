@@ -5,6 +5,8 @@
 - Fixed queue-only validation to reject moves when the current owner is not assignable in the target queue.
 - Kept execute on the same shared target owner/queue permission validation before mutation.
 - Preserved the `1.4.0` customer reassignment behavior without changing endpoint names.
+- Expanded README guidance and examples for controlled queue, owner, and customer workflows.
+- Documented customer-only and combined changes, `CustomerID`-only and locked-owner rejection, and target owner/queue permission failures.
 
 ## 1.4.0 - Unreleased
 

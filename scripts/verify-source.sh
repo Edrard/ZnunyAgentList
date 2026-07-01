@@ -391,7 +391,11 @@ fi
 
 if grep -Fq 'CustomerChanged' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
     && grep -Fq 'CustomerChanged' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
-    && grep -Fq 'CustomerUserID' "$ROOT/README.md"; then
+    && grep -Fq 'CustomerUserID' "$ROOT/README.md" \
+    && grep -Fiq 'CustomerID-only' "$ROOT/README.md" \
+    && grep -Fq 'Target owner is not assignable in target queue.' "$ROOT/README.md" \
+    && grep -Fq '/TicketMoveAssign/Validate' "$ROOT/README.md" \
+    && grep -Fq '/TicketMoveAssign' "$ROOT/README.md"; then
     pass 'Controlled move/assign customer support and CustomerChanged are documented'
 else
     fail 'Controlled move/assign customer support or CustomerChanged documentation was not found'
