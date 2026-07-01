@@ -318,58 +318,460 @@ Example `POST /TicketUnlock` body:
 Lock/unlock accepts only ticket identity, does not require a reason, and does
 not expose generic unrestricted `TicketUpdate` fields.
 
-Example `POST /TicketMoveAssign/Validate` body:
+### Controlled Ticket Move / Owner / Customer Workflow
+
+The same controlled workflow supports queue changes, owner assignment, customer
+reassignment, and any supported combination of those targets.
+
+#### Endpoints
+
+- `POST /TicketMoveAssign/Validate` is a dry run. It resolves `Current` and
+  `Target`, performs every validation, and never mutates the ticket.
+- `POST /TicketMoveAssign` runs the same shared preflight and executes only when
+  it returns valid. Its response contains `QueueChanged`, `OwnerChanged`,
+  `CustomerChanged`, `NoteCreated`, `Before`, and `After`.
+
+#### Request Fields
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `TicketID` | Yes | Existing ticket numeric ID. |
+| `QueueID` or `QueueName` | No | Target queue. If omitted, the current queue is retained. |
+| `OwnerID` or `OwnerLogin` | No | Target owner. If omitted, the current owner is retained. |
+| `CustomerUserID` | No | Target customer user login/identifier. |
+| `CustomerID` | No | Consistency check only when `CustomerUserID` is supplied. |
+| `Note` | Conditional | Required only when the resolved owner changes. |
+
+At least one queue, owner, or customer target must be supplied. `UserLogin` is
+reserved for GenericInterface authentication; it is never a target owner or
+customer. Use `OwnerLogin` for an owner login and `CustomerUserID` for a customer
+user.
+
+#### Response Fields
+
+Validation returns `Valid`, `RequiredNote`, `CustomerChanged`, `Current`,
+`Target`, `Errors`, and `Warnings`. Execution returns `Success`, `QueueChanged`,
+`OwnerChanged`, `CustomerChanged`, `NoteCreated`, `Before`, `After`, `Errors`,
+and `Warnings`.
+
+The snapshots include queue and owner data plus `CustomerID`, `CustomerUserID`,
+`CustomerUserFullname`, and `CustomerUserEmail`. Unavailable display values are
+empty strings; raw customer records are never returned.
+
+#### Validation And Permission Rules
+
+- The plugin resolves `CustomerUserID` through standard Znuny customer user APIs
+  and derives `CustomerID` from `UserCustomerID`.
+- A `CustomerID`-only change is rejected. When supplied with `CustomerUserID`,
+  `CustomerID` must match the derived value.
+- Locked, inactive, or unknown target owners are rejected.
+- Whenever the queue or owner changes, the resolved target owner must be
+  assignable in the resolved target queue. A queue-only move therefore fails if
+  the current owner cannot own tickets in the target queue.
+- Execute uses this same complete preflight. A validation failure does not
+  change queue, customer, or owner and does not create a note.
+
+#### Note Rules
+
+| Requested change | Note required |
+| --- | --- |
+| Queue only | No |
+| Customer only | No |
+| Queue + customer | No |
+| Owner only | Yes |
+| Queue + owner | Yes |
+| Owner + customer | Yes |
+| Queue + owner + customer | Yes |
+
+`NoteCreated=1` means the ZnunyAgentList wrapper created an additional
+controlled internal note. Customer-only changes never create one. Owner changes
+pass `Note` to native Znuny owner-change behavior and do not create a duplicate
+wrapper note. Znuny may still create a native system article, email, or history
+entry for an owner change while `NoteCreated` remains `0`.
+
+#### Execution Order
+
+After full validation succeeds, execution order is:
+
+1. Queue change.
+2. Customer change.
+3. Owner change.
+
+#### Examples
+
+The examples intentionally contain no authentication secrets.
+
+##### Customer-Only Change
+
+Validate request:
 
 ```json
 {
-  "TicketID": "57250",
-  "QueueID": "108",
-  "OwnerID": "30",
-  "CustomerUserID": "target.customer",
-  "Note": "Moving the ticket to the responsible engineer."
+  "TicketID": "57467",
+  "CustomerUserID": "VamarkClients"
 }
 ```
 
-Example `POST /TicketMoveAssign` body:
+Validation response:
 
 ```json
 {
-  "TicketID": "57250",
-  "QueueName": "Support::Projects",
-  "OwnerLogin": "assigned.agent",
-  "CustomerUserID": "target.customer",
-  "Note": "Assigning the ticket to the responsible engineer."
+  "Valid": 1,
+  "RequiredNote": 0,
+  "CustomerChanged": 1,
+  "Current": {
+    "CustomerID": "aventus",
+    "CustomerUserID": "AventusClients"
+  },
+  "Target": {
+    "CustomerID": "vamark project",
+    "CustomerUserID": "VamarkClients"
+  },
+  "Errors": [],
+  "Warnings": []
 }
 ```
 
-`TicketID` is required. A queue target may be supplied as `QueueID` or
-`QueueName`, an owner target as `OwnerID` or `OwnerLogin`, and a customer target
-as `CustomerUserID`. The customer user must exist and be active; its
-`UserCustomerID` becomes the target `CustomerID`. Optional `CustomerID` is only
-a consistency check and must match that derived value. `CustomerID`-only changes
-are rejected. When both queue or owner identity forms are supplied, the numeric
-ID is authoritative and a mismatch is reported as a warning. All targets and
-permissions are checked before any mutation runs. Whenever the queue or owner
-changes, validation confirms that the resolved target owner is assignable in
-the resolved target queue; this includes queue-only changes that retain the
-current owner.
+Execute uses the same request. Example response:
 
-Omitted queue, owner, or customer targets retain their current values in
-`Target`. The current queue is also used for owner permission validation when no
-queue target is supplied. `UserLogin` is reserved for GenericInterface
-authentication and is never accepted as a target owner or customer;
-login-based owner selection must use `OwnerLogin`, while customer selection uses
-`CustomerUserID`. `Current` and `Target` include `CustomerID`,
-`CustomerUserID`, `CustomerUserFullname`, and `CustomerUserEmail`; unavailable
-display fields are returned as empty strings rather than raw customer records.
+```json
+{
+  "Success": 1,
+  "QueueChanged": 0,
+  "OwnerChanged": 0,
+  "CustomerChanged": 1,
+  "NoteCreated": 0,
+  "Errors": [],
+  "Warnings": []
+}
+```
 
-Owner changes require a non-empty `Note`. Queue-only, customer-only, and
-queue-plus-customer changes do not require one. Customer-only changes do not
-create a wrapper note, even when an optional note is supplied. A queue change
-with a note and no owner change creates one controlled internal note; owner
-changes pass the note to the standard Znuny owner-change API and do not create a
-duplicate article. After complete validation, execution order is queue,
-customer, then owner. Validation failures modify nothing.
+##### CustomerID-Only Rejection
+
+```json
+{
+  "TicketID": "57467",
+  "CustomerID": "vamark project"
+}
+```
+
+```json
+{
+  "Valid": 0,
+  "RequiredNote": 0,
+  "CustomerChanged": 0,
+  "Errors": [
+    "CustomerUserID is required when changing customer."
+  ],
+  "Warnings": []
+}
+```
+
+##### Queue And Customer Without Note
+
+```json
+{
+  "TicketID": "57467",
+  "QueueID": "49",
+  "CustomerUserID": "AventusClients"
+}
+```
+
+```json
+{
+  "Valid": 1,
+  "RequiredNote": 0,
+  "CustomerChanged": 1,
+  "Target": {
+    "QueueID": 49,
+    "QueueName": "Vamark Projects",
+    "CustomerID": "aventus",
+    "CustomerUserID": "AventusClients"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+##### Owner And Customer
+
+Without the required owner note:
+
+```json
+{
+  "TicketID": "57467",
+  "OwnerID": "31",
+  "CustomerUserID": "VamarkClients"
+}
+```
+
+```json
+{
+  "Valid": 0,
+  "RequiredNote": 1,
+  "CustomerChanged": 1,
+  "Errors": [
+    "Note is required when owner changes."
+  ],
+  "Warnings": []
+}
+```
+
+With the required note:
+
+```json
+{
+  "TicketID": "57467",
+  "OwnerID": "31",
+  "CustomerUserID": "VamarkClients",
+  "Note": "Assigning owner and customer from integration UI."
+}
+```
+
+```json
+{
+  "Valid": 1,
+  "RequiredNote": 1,
+  "CustomerChanged": 1,
+  "Target": {
+    "OwnerID": 31,
+    "OwnerLogin": "zabbix.integration",
+    "CustomerID": "vamark project",
+    "CustomerUserID": "VamarkClients"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+##### Owner-Only Change
+
+```json
+{
+  "TicketID": "57467",
+  "OwnerLogin": "assigned.agent@example.com",
+  "Note": "Assigning the ticket from integration UI."
+}
+```
+
+```json
+{
+  "Valid": 1,
+  "RequiredNote": 1,
+  "CustomerChanged": 0,
+  "Target": {
+    "OwnerID": 31,
+    "OwnerLogin": "assigned.agent@example.com"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+##### Queue And Owner
+
+```json
+{
+  "TicketID": "57467",
+  "QueueID": "49",
+  "OwnerID": "31",
+  "Note": "Moving and assigning the ticket."
+}
+```
+
+```json
+{
+  "Valid": 1,
+  "RequiredNote": 1,
+  "CustomerChanged": 0,
+  "Target": {
+    "QueueID": 49,
+    "QueueName": "Vamark Projects",
+    "OwnerID": 31,
+    "OwnerLogin": "assigned.agent@example.com"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+##### Queue, Owner, And Customer
+
+```json
+{
+  "TicketID": "57467",
+  "QueueID": "49",
+  "OwnerID": "31",
+  "CustomerUserID": "VamarkClients",
+  "Note": "Moving and assigning owner and customer."
+}
+```
+
+```json
+{
+  "Valid": 1,
+  "RequiredNote": 1,
+  "CustomerChanged": 1,
+  "Target": {
+    "QueueID": 49,
+    "QueueName": "Vamark Projects",
+    "OwnerID": 31,
+    "OwnerLogin": "assigned.agent@example.com",
+    "CustomerID": "vamark project",
+    "CustomerUserID": "VamarkClients"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+##### Locked Owner Rejection
+
+```json
+{
+  "TicketID": "57467",
+  "OwnerID": "5",
+  "Note": "Assigning locked owner test."
+}
+```
+
+```json
+{
+  "Valid": 0,
+  "RequiredNote": 0,
+  "CustomerChanged": 0,
+  "Errors": [
+    "Target owner not found or is not active."
+  ],
+  "Warnings": []
+}
+```
+
+##### Queue-Only Permission Failure
+
+In this example, current `OwnerID=6` is not assignable in target `QueueID=3`.
+
+```json
+{
+  "TicketID": "57467",
+  "QueueID": "3"
+}
+```
+
+```json
+{
+  "Valid": 0,
+  "RequiredNote": 0,
+  "CustomerChanged": 0,
+  "Target": {
+    "QueueID": 3,
+    "QueueName": "Junk",
+    "OwnerID": 6,
+    "OwnerLogin": "limited.agent@example.com"
+  },
+  "Errors": [
+    "Target owner is not assignable in target queue."
+  ],
+  "Warnings": []
+}
+```
+
+##### Queue-Only Permission Success
+
+When the current owner is assignable in the target queue:
+
+```json
+{
+  "TicketID": "57467",
+  "QueueID": "49"
+}
+```
+
+```json
+{
+  "Valid": 1,
+  "RequiredNote": 0,
+  "CustomerChanged": 0,
+  "Target": {
+    "QueueID": 49,
+    "QueueName": "Vamark Projects",
+    "OwnerID": 2,
+    "OwnerLogin": "current.agent@example.com"
+  },
+  "Errors": [],
+  "Warnings": []
+}
+```
+
+##### TicketID-Only Rejection
+
+```json
+{
+  "TicketID": "57467"
+}
+```
+
+```json
+{
+  "Valid": 0,
+  "RequiredNote": 0,
+  "CustomerChanged": 0,
+  "Errors": [
+    "At least one target change is required."
+  ],
+  "Warnings": []
+}
+```
+
+#### Curl Examples
+
+Set `ZNUNY_BASE_URL`, `ZNUNY_API_USER`, and `ZNUNY_API_PASS` in the shell. Do
+not commit their real values.
+
+Validate customer-only:
+
+```bash
+curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign/Validate?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":"57467","CustomerUserID":"VamarkClients"}'
+```
+
+Execute customer-only:
+
+```bash
+curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":"57467","CustomerUserID":"VamarkClients"}'
+```
+
+Validate owner and customer with a note:
+
+```bash
+curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign/Validate?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":"57467","OwnerID":"31","CustomerUserID":"VamarkClients","Note":"Assigning owner and customer from integration UI."}'
+```
+
+Validate a queue-only move before attempting execution:
+
+```bash
+curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign/Validate?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H "Content-Type: application/json" \
+  -d '{"TicketID":"57467","QueueID":"3"}'
+```
+
+#### Integration Guidance
+
+A Laravel or other integration should use customer user search to select a
+customer, send `CustomerUserID` to `/TicketMoveAssign/Validate`, show `Current`,
+`Target`, `Errors`, and `Warnings` to the operator, and call
+`/TicketMoveAssign` only after `Valid=1`.
+
+After `QueueChanged`, `OwnerChanged`, or `CustomerChanged`, refresh safe ticket
+metadata. Customer-only changes usually leave `ArticleCount` and
+`LastArticleID` unchanged, but update `Changed` and `SyncFingerprint`. Native
+owner changes may add system article/history data, so refresh articles when
+`ArticleCount` or `LastArticleID` changes.
 
 ## GenericTicketConnector Compatibility Routes
 
@@ -1276,13 +1678,8 @@ Combined filters:
 }
 ```
 
-A Laravel integration can use `/CustomerUser` search to select a customer user,
-submit its `CustomerUserID` to `/TicketMoveAssign/Validate`, and use
-`Target.CustomerID` / `Target.CustomerUserID` from the validation response.
-After `/TicketMoveAssign` succeeds, refresh safe ticket metadata; also refresh
-the article cache when the owner changed or `SyncFingerprint` changed. Queue
-selection can continue to load `/Queue/{QueueID}/AssignableAgents` before
-validation.
+See the controlled move / owner / customer workflow above for validation,
+execution, and cache refresh guidance.
 
 A Laravel integration can show **Lock / Take in work** when `Lock` is `unlock`,
 and **Unlock / Release** when `Lock` is `lock`. After either operation, refresh
