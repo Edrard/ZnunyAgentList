@@ -67,8 +67,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.3.2' ]; then
-        pass 'SOPM version is 1.3.2'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.4.0' ]; then
+        pass 'SOPM version is 1.4.0'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -379,11 +379,21 @@ if [ -z "$INLINE_MOVE_ASSIGN_PARAM" ] \
     && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
     && grep -Fq "Param( \\%Param, 'OwnerLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
     && grep -Fq "Param( \\%Param, 'OwnerLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
+    && grep -Fq "Param( \\%Param, 'CustomerUserID' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    && grep -Fq "Param( \\%Param, 'CustomerUserID' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
     && ! grep -Fq "Param( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
     && ! grep -Fq "Param( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm"; then
-    pass 'Move/assign target owner uses OwnerLogin and never authentication UserLogin'
+    pass 'Move/assign targets use OwnerLogin and CustomerUserID, never authentication UserLogin'
 else
-    fail 'Move/assign target owner input is not isolated from authentication UserLogin'
+    fail 'Move/assign owner or customer target is not isolated from authentication UserLogin'
+fi
+
+if grep -Fq 'CustomerChanged' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    && grep -Fq 'CustomerChanged' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
+    && grep -Fq 'CustomerUserID' "$ROOT/README.md"; then
+    pass 'Controlled move/assign customer support and CustomerChanged are documented'
+else
+    fail 'Controlled move/assign customer support or CustomerChanged documentation was not found'
 fi
 
 if command -v perl >/dev/null 2>&1; then
@@ -508,13 +518,16 @@ QUEUE_SET_OUTSIDE_COMMON=$(grep -R -n -E '\bTicketQueueSet\s*\(' "$ROOT/Kernel/G
     | grep -Fv "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm:" || true)
 OWNER_SET_OUTSIDE_COMMON=$(grep -R -n -E '\bTicketOwnerSet\s*\(' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' \
     | grep -Fv "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm:" || true)
-if [ -n "$QUEUE_SET_OUTSIDE_COMMON" ] || [ -n "$OWNER_SET_OUTSIDE_COMMON" ]; then
-    fail 'TicketQueueSet or TicketOwnerSet call found outside the controlled common helper'
+CUSTOMER_SET_OUTSIDE_COMMON=$(grep -R -n -E '\bTicketCustomerSet\s*\(' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' \
+    | grep -Fv "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm:" || true)
+if [ -n "$QUEUE_SET_OUTSIDE_COMMON" ] || [ -n "$OWNER_SET_OUTSIDE_COMMON" ] || [ -n "$CUSTOMER_SET_OUTSIDE_COMMON" ]; then
+    fail 'TicketQueueSet, TicketCustomerSet, or TicketOwnerSet call found outside the controlled common helper'
 elif grep -Fq '$TicketObject->TicketQueueSet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq '$TicketObject->TicketCustomerSet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq '$TicketObject->TicketOwnerSet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
-    pass 'TicketQueueSet and TicketOwnerSet are confined to the controlled common helper'
+    pass 'TicketQueueSet, TicketCustomerSet, and TicketOwnerSet are confined to the controlled common helper'
 else
-    fail 'Controlled TicketQueueSet or TicketOwnerSet implementation was not found'
+    fail 'Controlled TicketQueueSet, TicketCustomerSet, or TicketOwnerSet implementation was not found'
 fi
 
 WRITE_STYLE_CALLS=$(grep -R -n -E '\b(TicketCreate|TicketUpdate|TicketUnlock|SetPreferences|QueueUpdate|QueueAdd|CustomerUserAdd|CustomerUserUpdate|SLAAdd|SLAUpdate|ServiceAdd|ServiceUpdate|PriorityAdd|PriorityUpdate|StateAdd|StateUpdate|TypeAdd|TypeUpdate)\s*\(|DB->Do\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' || true)

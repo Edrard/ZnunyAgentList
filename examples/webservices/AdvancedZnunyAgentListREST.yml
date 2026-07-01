@@ -2,7 +2,7 @@
 Debugger:
   DebugThreshold: debug
   TestMode: '0'
-Description: AdvancedZnunyAgentListREST import template for ZnunyAgentList 1.3.2
+Description: AdvancedZnunyAgentListREST import template for ZnunyAgentList 1.4.0
 FrameworkVersion: 6.5.20
 Provider:
   Operation:
@@ -157,14 +157,14 @@ Provider:
       Type: Ticket::Unlock
     TicketMoveAssignValidate:
       Description: >-
-        Validates a controlled queue move and/or owner assignment without
+        Validates a controlled queue, customer, and/or owner change without
         modifying the ticket. Uses the ZnunyAgentList write authorization path.
       IncludeTicketData: '0'
       Type: Ticket::MoveAssignValidate
     TicketMoveAssign:
       Description: >-
-        Moves a ticket and/or assigns its owner through standard Znuny APIs
-        after shared preflight validation and write authorization.
+        Changes a ticket queue, customer, and/or owner through standard Znuny
+        APIs after shared preflight validation and write authorization.
       IncludeTicketData: '0'
       Type: Ticket::MoveAssign
     ResolveTicketDefaults:
