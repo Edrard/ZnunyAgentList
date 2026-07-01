@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.3.2';
+use constant PACKAGE_VERSION => '1.4.0';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -821,6 +821,48 @@ sub OwnerCanOwnQueue {
     return scalar grep { $_->{UserID} == $OwnerID } @{$Agents};
 }
 
+sub TicketCustomerData {
+    my ( $Class, %Param ) = @_;
+
+    my $CustomerUserID = $Class->SafeString( $Param{CustomerUserID}, 255 );
+    return if !$CustomerUserID || $CustomerUserID =~ /[*%?]/;
+
+    my $CustomerUserObject = eval { $Kernel::OM->Get('Kernel::System::CustomerUser') };
+    return if !$CustomerUserObject;
+
+    my %UserData = eval {
+        $CustomerUserObject->CustomerUserDataGet(
+            User => $CustomerUserID,
+        );
+    };
+    return if $@ || !$UserData{UserLogin} || !$UserData{UserCustomerID};
+
+    my %ActiveUsers = eval {
+        $CustomerUserObject->CustomerSearch(
+            UserLogin => $UserData{UserLogin},
+            Valid     => 1,
+            Limit     => 100,
+        );
+    };
+    return if $@ || !grep { lc $_ eq lc $UserData{UserLogin} } keys %ActiveUsers;
+
+    my $Fullname = eval {
+        $CustomerUserObject->CustomerName(
+            UserLogin => $UserData{UserLogin},
+        );
+    };
+    if ( $@ || !defined $Fullname ) {
+        $Fullname = join q{ }, grep { defined && $_ ne q{} } @UserData{qw(UserFirstname UserLastname)};
+    }
+
+    return {
+        CustomerID          => $UserData{UserCustomerID} // q{},
+        CustomerUserID      => $UserData{UserLogin} // q{},
+        CustomerUserFullname => $Fullname // q{},
+        CustomerUserEmail   => $UserData{UserEmail} // q{},
+    };
+}
+
 sub TicketAssignmentSnapshot {
     my ( $Class, %Param ) = @_;
 
@@ -840,12 +882,20 @@ sub TicketAssignmentSnapshot {
         $OwnerFullname = $FullNames{ $Ticket->{OwnerID} } // q{} if !$@;
     }
 
+    my $Customer = $Class->TicketCustomerData(
+        CustomerUserID => $Ticket->{CustomerUserID},
+    ) || {};
+
     return {
         QueueID       => 0 + ( $Ticket->{QueueID} || 0 ),
         QueueName     => $Ticket->{Queue} // q{},
         OwnerID       => 0 + ( $Ticket->{OwnerID} || 0 ),
         OwnerLogin    => $Ticket->{Owner} // q{},
         OwnerFullname => $OwnerFullname,
+        CustomerID          => $Customer->{CustomerID} // $Ticket->{CustomerID} // q{},
+        CustomerUserID      => $Customer->{CustomerUserID} // $Ticket->{CustomerUserID} // q{},
+        CustomerUserFullname => $Customer->{CustomerUserFullname} // $Ticket->{CustomerUser} // q{},
+        CustomerUserEmail   => $Customer->{CustomerUserEmail} // q{},
     };
 }
 
@@ -883,7 +933,9 @@ sub MoveAssignValidation {
     my $RawQueueName = $Class->SafeString( $Param{QueueName}, 255 );
     my $RawOwnerID   = $Class->SafeString( $Param{OwnerID}, 32 );
     my $RawOwnerLogin = $Class->SafeString( $Param{OwnerLogin}, 255 );
-    my $Note         = $Class->SafeString( $Param{Note}, 4000 );
+    my $RawCustomerUserID = $Class->SafeString( $Param{CustomerUserID}, 255 );
+    my $RawCustomerID = $Class->SafeString( $Param{CustomerID}, 255 );
+    my $Note          = $Class->SafeString( $Param{Note}, 4000 );
 
     push @Errors, 'TicketID is required and must be a positive integer.' if !$TicketID;
     push @Errors, 'QueueID must be a positive integer.' if $RawQueueID ne q{} && !$Class->PositiveInt($RawQueueID);
@@ -891,7 +943,11 @@ sub MoveAssignValidation {
 
     my $QueueRequested = $RawQueueID ne q{} || $RawQueueName ne q{};
     my $OwnerRequested = $RawOwnerID ne q{} || $RawOwnerLogin ne q{};
-    push @Errors, 'At least one target change is required.' if !$QueueRequested && !$OwnerRequested;
+    my $CustomerRequested = $RawCustomerUserID ne q{} || $RawCustomerID ne q{};
+    push @Errors, 'CustomerUserID is required when changing customer.'
+        if $RawCustomerID ne q{} && $RawCustomerUserID eq q{};
+    push @Errors, 'At least one target change is required.'
+        if !$QueueRequested && !$OwnerRequested && !$CustomerRequested;
 
     my $Ticket;
     if ( $TicketID && $UserID ) {
@@ -905,6 +961,7 @@ sub MoveAssignValidation {
     my $Current = $Ticket ? $Class->TicketAssignmentSnapshot( Ticket => $Ticket ) : undef;
     my $TargetQueue;
     my $TargetOwner;
+    my $TargetCustomer;
 
     if ($Ticket) {
         if ($QueueRequested) {
@@ -939,6 +996,25 @@ sub MoveAssignValidation {
                 OwnerFullname => $Current->{OwnerFullname},
             };
         }
+
+        if ( $RawCustomerUserID ne q{} ) {
+            $TargetCustomer = $Class->TicketCustomerData(
+                CustomerUserID => $RawCustomerUserID,
+            );
+            push @Errors, 'Target customer user not found or is not active.' if !$TargetCustomer;
+
+            if ( $TargetCustomer && $RawCustomerID ne q{} && $TargetCustomer->{CustomerID} ne $RawCustomerID ) {
+                push @Errors, 'CustomerID does not match CustomerUserID.';
+            }
+        }
+        else {
+            $TargetCustomer = {
+                CustomerID          => $Current->{CustomerID},
+                CustomerUserID      => $Current->{CustomerUserID},
+                CustomerUserFullname => $Current->{CustomerUserFullname},
+                CustomerUserEmail   => $Current->{CustomerUserEmail},
+            };
+        }
     }
 
     my $QueueChanged = $Current && $TargetQueue
@@ -946,6 +1022,14 @@ sub MoveAssignValidation {
         : 0;
     my $OwnerChanged = $Current && $TargetOwner
         ? ( $Current->{OwnerID} != $TargetOwner->{OwnerID} ? 1 : 0 )
+        : 0;
+    my $CustomerChanged = $Current && $TargetCustomer && $RawCustomerUserID ne q{}
+        ? (
+            $Current->{CustomerUserID} ne $TargetCustomer->{CustomerUserID}
+                || $Current->{CustomerID} ne $TargetCustomer->{CustomerID}
+            ? 1
+            : 0
+        )
         : 0;
     my $RequiredNote = $OwnerChanged ? 1 : 0;
 
@@ -970,18 +1054,24 @@ sub MoveAssignValidation {
 
     push @Errors, 'Note is required when owner changes.' if $RequiredNote && $Note eq q{};
 
-    if ( $Ticket && ( $QueueRequested || $OwnerRequested ) && !$QueueChanged && !$OwnerChanged ) {
-        push @Warnings, 'Requested queue and owner already match the ticket.';
-        push @Errors, 'No queue or owner change would be made.';
+    if ( $Ticket && ( $QueueRequested || $OwnerRequested || $CustomerRequested )
+        && !$QueueChanged && !$OwnerChanged && !$CustomerChanged )
+    {
+        push @Warnings, 'Requested targets already match the ticket.';
+        push @Errors, 'No queue, owner, or customer change would be made.';
     }
 
-    my $Target = $TargetQueue && $TargetOwner
+    my $Target = $TargetQueue && $TargetOwner && $TargetCustomer
         ? {
             QueueID       => $TargetQueue->{QueueID},
             QueueName     => $TargetQueue->{QueueName},
             OwnerID       => $TargetOwner->{OwnerID},
             OwnerLogin    => $TargetOwner->{OwnerLogin},
             OwnerFullname => $TargetOwner->{OwnerFullname},
+            CustomerID          => $TargetCustomer->{CustomerID},
+            CustomerUserID      => $TargetCustomer->{CustomerUserID},
+            CustomerUserFullname => $TargetCustomer->{CustomerUserFullname},
+            CustomerUserEmail   => $TargetCustomer->{CustomerUserEmail},
         }
         : undef;
 
@@ -994,6 +1084,7 @@ sub MoveAssignValidation {
         Warnings      => \@Warnings,
         QueueChanged  => $QueueChanged,
         OwnerChanged  => $OwnerChanged,
+        CustomerChanged => $CustomerChanged,
         Note          => $Note,
         Ticket        => $Ticket,
     };
@@ -1039,6 +1130,30 @@ sub TicketOwnerUpdate {
             NewUserID => $OwnerID,
             UserID    => $UserID,
             Comment   => $Comment,
+        );
+    };
+
+    return $@ ? undef : $Success;
+}
+
+sub TicketCustomerUpdate {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID      = $Class->PositiveInt( $Param{TicketID} );
+    my $CustomerID    = $Class->SafeString( $Param{CustomerID}, 255 );
+    my $CustomerUserID = $Class->SafeString( $Param{CustomerUserID}, 255 );
+    my $UserID        = $Class->PositiveInt( $Param{UserID} );
+    return if !$TicketID || !$CustomerID || !$CustomerUserID || !$UserID;
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    return if !$TicketObject;
+
+    my $Success = eval {
+        $TicketObject->TicketCustomerSet(
+            TicketID => $TicketID,
+            No       => $CustomerID,
+            User     => $CustomerUserID,
+            UserID   => $UserID,
         );
     };
 

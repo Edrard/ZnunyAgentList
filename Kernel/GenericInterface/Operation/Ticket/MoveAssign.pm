@@ -26,7 +26,9 @@ sub Run {
     my $RawQueueName = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueName' );
     my $RawOwnerID   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' );
     my $RawOwnerLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerLogin' );
-    my $RawNote      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Note' );
+    my $RawCustomerUserID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUserID' );
+    my $RawCustomerID     = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerID' );
+    my $RawNote           = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Note' );
 
     my $Validation = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->MoveAssignValidation(
         TicketID  => $RawTicketID,
@@ -34,6 +36,8 @@ sub Run {
         QueueName => $RawQueueName,
         OwnerID   => $RawOwnerID,
         OwnerLogin => $RawOwnerLogin,
+        CustomerUserID => $RawCustomerUserID,
+        CustomerID     => $RawCustomerID,
         Note      => $RawNote,
         UserID    => $UserID,
     );
@@ -45,6 +49,7 @@ sub Run {
         TicketNumber  => $Ticket->{TicketNumber} // q{},
         QueueChanged  => 0,
         OwnerChanged  => 0,
+        CustomerChanged => 0,
         NoteCreated   => 0,
         Before        => $Validation->{Current},
         After         => $Validation->{Current},
@@ -73,6 +78,23 @@ sub Run {
             };
         }
         $Response->{QueueChanged} = 1;
+    }
+
+    if ( $Validation->{CustomerChanged} ) {
+        my $CustomerUpdated = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketCustomerUpdate(
+            TicketID      => $Ticket->{TicketID},
+            CustomerID    => $Validation->{Target}->{CustomerID},
+            CustomerUserID => $Validation->{Target}->{CustomerUserID},
+            UserID        => $UserID,
+        );
+        if ( !$CustomerUpdated ) {
+            push @{ $Response->{Errors} }, 'Ticket customer could not be changed.';
+            return {
+                Success => 1,
+                Data    => $Response,
+            };
+        }
+        $Response->{CustomerChanged} = 1;
     }
 
     if ( $Validation->{OwnerChanged} ) {

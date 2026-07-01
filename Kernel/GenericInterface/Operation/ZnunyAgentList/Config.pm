@@ -42,6 +42,7 @@ sub Run {
                 TicketUnlock          => 1,
                 TicketMoveAssignValidate => 1,
                 TicketMoveAssign      => 1,
+                TicketMoveAssignCustomer => 1,
                 ResolveTicketDefaults => 1,
                 TicketStateList       => 1,
                 TicketPriorityList    => 1,

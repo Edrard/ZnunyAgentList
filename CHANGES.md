@@ -1,5 +1,14 @@
 # ZnunyAgentList Changelog
 
+## 1.4.0 - Unreleased
+
+- Extended `TicketMoveAssign` with controlled customer reassignment through `CustomerUserID`.
+- Derived `CustomerID` from the resolved active customer user and rejected `CustomerID`-only changes.
+- Added `CustomerChanged` and safe customer fields to `Current`, `Target`, `Before`, and `After`.
+- Kept customer-only and queue-plus-customer changes free of a required `Note`; owner changes still require one.
+- Kept authentication `UserLogin` isolated from owner and customer targets.
+- Used standard Znuny APIs without raw SQL or an unrestricted GenericInterface `TicketUpdate` operation.
+
 ## 1.3.2 - Unreleased
 
 - Fixed authentication `UserLogin` being treated as a move/assign target owner.

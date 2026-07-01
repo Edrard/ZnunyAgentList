@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.3.2`.
+Current package version: `1.4.0`.
 
 The package provides a controlled REST surface for:
 
@@ -117,10 +117,11 @@ They change only ticket lock state and do not create articles, notes, or replies
 Znuny may still record its normal internal ticket history for these actions.
 
 `Ticket::MoveAssignValidate` and `Ticket::MoveAssign` use the same write
-authorization checks. They expose only queue and owner targets, prevalidate a
-combined queue/owner change before modifying the ticket, and use standard Znuny
-`TicketQueueSet()` and `TicketOwnerSet()` APIs. No raw SQL or custom unrestricted
-runtime `TicketUpdate` operation is used.
+authorization checks. They expose only controlled queue, customer user, and
+owner targets, prevalidate the complete change before modifying the ticket, and
+use standard Znuny `TicketQueueSet()`, `TicketCustomerSet()`, and
+`TicketOwnerSet()` APIs. No raw SQL or custom unrestricted runtime
+`TicketUpdate` operation is used.
 
 ## What The Package Does Not Do
 
@@ -260,8 +261,8 @@ checks documented above.
 | `POST` | `/TicketReopen` | `Ticket::Reopen` | Add a note and move ticket to configured reopen state | `TicketID` or `TicketNumber`, `Reason`, optional `Kind`, `Subject`, `Body` | `TicketID`, `TicketNumber`, `State`, `StateType`, `ArticleID` |
 | `POST` | `/TicketLock` | `Ticket::Lock` | Change only the ticket lock state to `lock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
 | `POST` | `/TicketUnlock` | `Ticket::Unlock` | Change only the ticket lock state to `unlock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
-| `POST` | `/TicketMoveAssign/Validate` | `Ticket::MoveAssignValidate` | Validate a queue move and/or owner assignment without changing the ticket | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, conditional `Note` | `Valid`, `RequiredNote`, `Current`, `Target`, `Errors[]`, `Warnings[]` |
-| `POST` | `/TicketMoveAssign` | `Ticket::MoveAssign` | Apply a prevalidated queue move and/or owner assignment | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, conditional `Note` | `Success`, `QueueChanged`, `OwnerChanged`, `NoteCreated`, `Before`, `After`, `Errors[]`, `Warnings[]` |
+| `POST` | `/TicketMoveAssign/Validate` | `Ticket::MoveAssignValidate` | Validate a queue, customer, and/or owner change without changing the ticket | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, optional `CustomerUserID`, conditional `Note` | `Valid`, `RequiredNote`, `CustomerChanged`, `Current`, `Target`, `Errors[]`, `Warnings[]` |
+| `POST` | `/TicketMoveAssign` | `Ticket::MoveAssign` | Apply a prevalidated queue, customer, and/or owner change | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, optional `CustomerUserID`, conditional `Note` | `Success`, `QueueChanged`, `CustomerChanged`, `OwnerChanged`, `NoteCreated`, `Before`, `After`, `Errors[]`, `Warnings[]` |
 
 Example `POST /TicketArticle` body:
 
@@ -324,6 +325,7 @@ Example `POST /TicketMoveAssign/Validate` body:
   "TicketID": "57250",
   "QueueID": "108",
   "OwnerID": "30",
+  "CustomerUserID": "target.customer",
   "Note": "Moving the ticket to the responsible engineer."
 }
 ```
@@ -335,31 +337,36 @@ Example `POST /TicketMoveAssign` body:
   "TicketID": "57250",
   "QueueName": "Support::Projects",
   "OwnerLogin": "assigned.agent",
+  "CustomerUserID": "target.customer",
   "Note": "Assigning the ticket to the responsible engineer."
 }
 ```
 
 `TicketID` is required. A queue target may be supplied as `QueueID` or
-`QueueName`, and an owner target as `OwnerID` or `OwnerLogin`. When both forms of
-one identity are supplied, the numeric ID is authoritative and a mismatch is
-reported as a warning. The ticket, queue, active owner, target queue owner
-permission, and move permission are checked before either mutation runs.
+`QueueName`, an owner target as `OwnerID` or `OwnerLogin`, and a customer target
+as `CustomerUserID`. The customer user must exist and be active; its
+`UserCustomerID` becomes the target `CustomerID`. Optional `CustomerID` is only
+a consistency check and must match that derived value. `CustomerID`-only changes
+are rejected. When both queue or owner identity forms are supplied, the numeric
+ID is authoritative and a mismatch is reported as a warning. All targets and
+permissions are checked before any mutation runs.
 
-Queue fields are optional for owner-only changes; when omitted, the current
-ticket queue becomes the target queue for owner permission validation. Owner
-fields are optional for queue-only changes; when omitted, the current owner is
-preserved in the `Target` snapshot. `UserLogin` is reserved for GenericInterface
-authentication and is never accepted as a target owner; login-based owner
-selection must use `OwnerLogin`. Validation returns populated
-`Current` data once the ticket is resolved and populated `Target` data once both
-target values can be resolved, including when a later validation rule fails.
+Omitted queue, owner, or customer targets retain their current values in
+`Target`. The current queue is also used for owner permission validation when no
+queue target is supplied. `UserLogin` is reserved for GenericInterface
+authentication and is never accepted as a target owner or customer;
+login-based owner selection must use `OwnerLogin`, while customer selection uses
+`CustomerUserID`. `Current` and `Target` include `CustomerID`,
+`CustomerUserID`, `CustomerUserFullname`, and `CustomerUserEmail`; unavailable
+display fields are returned as empty strings rather than raw customer records.
 
-Owner changes require a non-empty `Note`. Queue-only changes do not require a
-note. A queue-only change with a note creates one controlled internal note;
-owner changes pass the note to the standard Znuny owner-change API and do not
-create a duplicate article. Queue-plus-owner requests change the queue first and
-then the owner after all validation succeeds. Validation failures modify
-nothing.
+Owner changes require a non-empty `Note`. Queue-only, customer-only, and
+queue-plus-customer changes do not require one. Customer-only changes do not
+create a wrapper note, even when an optional note is supplied. A queue change
+with a note and no owner change creates one controlled internal note; owner
+changes pass the note to the standard Znuny owner-change API and do not create a
+duplicate article. After complete validation, execution order is queue,
+customer, then owner. Validation failures modify nothing.
 
 ## GenericTicketConnector Compatibility Routes
 
@@ -504,7 +511,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.3.2",
+  "Version": "1.4.0",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -517,7 +524,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.3.2",
+  "Version": "1.4.0",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -532,6 +539,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
     "TicketUnlock": 1,
     "TicketMoveAssignValidate": 1,
     "TicketMoveAssign": 1,
+    "TicketMoveAssignCustomer": 1,
     "ValidateTicketCreate": 1
   }
 }
@@ -1199,19 +1207,28 @@ Combined filters:
 {
   "Valid": 1,
   "RequiredNote": 1,
+  "CustomerChanged": 1,
   "Current": {
     "QueueID": 49,
     "QueueName": "Support",
     "OwnerID": 2,
     "OwnerLogin": "current.agent",
-    "OwnerFullname": "Current Agent"
+    "OwnerFullname": "Current Agent",
+    "CustomerID": "old-customer",
+    "CustomerUserID": "old.customer",
+    "CustomerUserFullname": "Old Customer",
+    "CustomerUserEmail": "old.customer@example.invalid"
   },
   "Target": {
     "QueueID": 108,
     "QueueName": "Support::Projects",
     "OwnerID": 30,
     "OwnerLogin": "assigned.agent",
-    "OwnerFullname": "Assigned Agent"
+    "OwnerFullname": "Assigned Agent",
+    "CustomerID": "target-customer",
+    "CustomerUserID": "target.customer",
+    "CustomerUserFullname": "Target Customer",
+    "CustomerUserEmail": "target.customer@example.invalid"
   },
   "Errors": [],
   "Warnings": []
@@ -1227,30 +1244,42 @@ Combined filters:
   "TicketNumber": "2026062346000357",
   "QueueChanged": 1,
   "OwnerChanged": 1,
+  "CustomerChanged": 1,
   "NoteCreated": 0,
   "Before": {
     "QueueID": 49,
     "QueueName": "Support",
     "OwnerID": 2,
     "OwnerLogin": "current.agent",
-    "OwnerFullname": "Current Agent"
+    "OwnerFullname": "Current Agent",
+    "CustomerID": "old-customer",
+    "CustomerUserID": "old.customer",
+    "CustomerUserFullname": "Old Customer",
+    "CustomerUserEmail": "old.customer@example.invalid"
   },
   "After": {
     "QueueID": 108,
     "QueueName": "Support::Projects",
     "OwnerID": 30,
     "OwnerLogin": "assigned.agent",
-    "OwnerFullname": "Assigned Agent"
+    "OwnerFullname": "Assigned Agent",
+    "CustomerID": "target-customer",
+    "CustomerUserID": "target.customer",
+    "CustomerUserFullname": "Target Customer",
+    "CustomerUserEmail": "target.customer@example.invalid"
   },
   "Errors": [],
   "Warnings": []
 }
 ```
 
-A Laravel integration can load `/Queue/{QueueID}/AssignableAgents` after queue
-selection, call `/TicketMoveAssign/Validate` before enabling or confirming
-submit, then call `/TicketMoveAssign` and refresh safe ticket metadata or its
-local cache after success.
+A Laravel integration can use `/CustomerUser` search to select a customer user,
+submit its `CustomerUserID` to `/TicketMoveAssign/Validate`, and use
+`Target.CustomerID` / `Target.CustomerUserID` from the validation response.
+After `/TicketMoveAssign` succeeds, refresh safe ticket metadata; also refresh
+the article cache when the owner changed or `SyncFingerprint` changed. Queue
+selection can continue to load `/Queue/{QueueID}/AssignableAgents` before
+validation.
 
 A Laravel integration can show **Lock / Take in work** when `Lock` is `unlock`,
 and **Unlock / Release** when `Lock` is `lock`. After either operation, refresh
@@ -1312,7 +1341,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.3.2.opm
+/path/to/output/ZnunyAgentList-1.4.0.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1321,14 +1350,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.3.2.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.4.0.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.3.2.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.4.0.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

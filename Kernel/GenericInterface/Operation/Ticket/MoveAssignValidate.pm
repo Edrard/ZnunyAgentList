@@ -26,7 +26,9 @@ sub Run {
     my $RawQueueName = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueName' );
     my $RawOwnerID   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' );
     my $RawOwnerLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerLogin' );
-    my $RawNote      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Note' );
+    my $RawCustomerUserID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUserID' );
+    my $RawCustomerID     = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerID' );
+    my $RawNote           = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Note' );
 
     my $Validation = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->MoveAssignValidation(
         TicketID  => $RawTicketID,
@@ -34,6 +36,8 @@ sub Run {
         QueueName => $RawQueueName,
         OwnerID   => $RawOwnerID,
         OwnerLogin => $RawOwnerLogin,
+        CustomerUserID => $RawCustomerUserID,
+        CustomerID     => $RawCustomerID,
         Note      => $RawNote,
         UserID    => $UserID,
     );
@@ -43,6 +47,7 @@ sub Run {
         Data    => {
             Valid        => $Validation->{Valid},
             RequiredNote => $Validation->{RequiredNote},
+            CustomerChanged => $Validation->{CustomerChanged},
             Current      => $Validation->{Current},
             Target       => $Validation->{Target},
             Errors       => $Validation->{Errors},
