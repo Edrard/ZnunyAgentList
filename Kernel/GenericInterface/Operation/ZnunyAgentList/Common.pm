@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.4.1';
+use constant PACKAGE_VERSION => '1.5.0';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -806,6 +806,64 @@ sub AssignableAgents {
     } @Agents;
 
     return ( $Queue, \@Agents );
+}
+
+sub AssignableQueues {
+    my ( $Class, %Param ) = @_;
+
+    my $Owner = $Class->OwnerData( OwnerID => $Param{UserID} );
+    return if !$Owner;
+
+    my $QueueObject  = eval { $Kernel::OM->Get('Kernel::System::Queue') };
+    my $GroupObject  = eval { $Kernel::OM->Get('Kernel::System::Group') };
+    my $ConfigObject = eval { $Kernel::OM->Get('Kernel::Config') };
+    return if !$QueueObject || !$GroupObject || !$ConfigObject;
+
+    my %QueueList = eval { $QueueObject->QueueList( Valid => 1 ) };
+    return if $@;
+
+    my $ChangeOwnerToEveryone = $ConfigObject->Get('Ticket::ChangeOwnerToEveryone') ? 1 : 0;
+    my %OwnerGroups;
+    if ( !$ChangeOwnerToEveryone ) {
+        %OwnerGroups = eval {
+            $GroupObject->PermissionUserGet(
+                UserID => $Owner->{OwnerID},
+                Type   => 'owner',
+            );
+        };
+        return if $@;
+    }
+
+    my @Queues;
+    QUEUEID:
+    for my $QueueID ( sort { $a <=> $b } keys %QueueList ) {
+        next QUEUEID if !$QueueID || !$QueueList{$QueueID};
+
+        my $Queue = $Class->QueueData( QueueID => $QueueID );
+        next QUEUEID if !$Queue || !$Queue->{GroupID};
+        next QUEUEID if !$ChangeOwnerToEveryone && !$OwnerGroups{ $Queue->{GroupID} };
+
+        push @Queues, {
+            QueueID  => $Queue->{QueueID},
+            Name     => $Queue->{QueueName},
+            FullName => $Queue->{QueueName},
+        };
+    }
+
+    @Queues = sort {
+        lc( $a->{FullName} // q{} ) cmp lc( $b->{FullName} // q{} )
+            || lc( $a->{Name} // q{} ) cmp lc( $b->{Name} // q{} )
+            || ( $a->{QueueID} || 0 ) <=> ( $b->{QueueID} || 0 )
+    } @Queues;
+
+    return (
+        {
+            UserID       => $Owner->{OwnerID},
+            UserLogin    => $Owner->{OwnerLogin},
+            UserFullname => $Owner->{OwnerFullname},
+        },
+        \@Queues,
+    );
 }
 
 sub OwnerCanOwnQueue {

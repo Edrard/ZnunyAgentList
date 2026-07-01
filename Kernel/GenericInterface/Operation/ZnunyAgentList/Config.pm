@@ -28,6 +28,7 @@ sub Run {
             Version => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PACKAGE_VERSION,
             Features => {
                 AgentList             => 1,
+                AgentAssignableQueues => 1,
                 QueueList             => 1,
                 QueueGet              => 1,
                 QueueAssignableAgents => 1,

@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.4.1`.
+Current package version: `1.5.0`.
 
 The package provides a controlled REST surface for:
 
@@ -213,6 +213,7 @@ operations.
 | `GET` | `/Health` | `ZnunyAgentList::Health` | Authenticated package health | none | `Plugin`, `Version`, `Success`, `Time` |
 | `GET` | `/SystemConfig` | `ZnunyAgentList::Config` | Package capabilities/config summary | none | `Plugin`, `Version`, `Features`, `Znuny` |
 | `GET` | `/Agent` | `User::AgentList` | List valid active agents | none | `Agents[]` with `UserID`, `UserLogin`, `UserFullname` |
+| `GET` | `/Agent/:UserID/AssignableQueues` | `User::AssignableQueues` | List valid queues where an active agent may own tickets | `UserID` path parameter | `Success`, safe user fields, `Queues[]`, `Errors[]` |
 | `GET` | `/Queue` | `Queue::List` | List valid queues | none | `Queues[]` |
 | `GET` | `/Queue/:QueueID` | `Queue::Get` | Get queue by numeric ID | `QueueID` path parameter | `Queue.Found`, queue metadata |
 | `GET` | `/QueueByName/:Name` | `Queue::Get` | Get queue by name | `Name` path parameter | `Queue.Found`, queue metadata |
@@ -916,7 +917,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.4.1",
+  "Version": "1.5.0",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -929,9 +930,10 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.4.1",
+  "Version": "1.5.0",
   "Features": {
     "AgentList": 1,
+    "AgentAssignableQueues": 1,
     "QueueList": 1,
     "QueueAssignableAgents": 1,
     "CustomerUserSearch": 1,
@@ -965,6 +967,74 @@ GenericTicketConnector response shapes and are not documented in detail here.
   ]
 }
 ```
+
+### Agent Assignable Queues
+
+`GET /Agent/{UserID}/AssignableQueues` is the reverse lookup for
+`GET /Queue/{QueueID}/AssignableAgents`. `UserID` identifies the target agent;
+authentication `UserLogin` remains authentication-only.
+
+The endpoint requires the normal read authorization model and does not require
+`ZnunyAgentList::EnableTicketWriteOperations`. It returns only valid queues
+where the selected active agent has Znuny `owner` permission.
+
+```bash
+curl -skG "$ZNUNY_BASE_URL/Agent/6/AssignableQueues" \
+  --data-urlencode "UserLogin=$ZNUNY_API_USER" \
+  --data-urlencode "Password=$ZNUNY_API_PASS"
+```
+
+Active agent with assignable queues:
+
+```json
+{
+  "Success": 1,
+  "UserID": 6,
+  "UserLogin": "limited.agent@example.com",
+  "UserFullname": "Limited Agent",
+  "Queues": [
+    {
+      "QueueID": 49,
+      "Name": "Vamark Projects",
+      "FullName": "Vamark Projects"
+    }
+  ],
+  "Errors": []
+}
+```
+
+An active agent with no assignable queues is still a successful lookup:
+
+```json
+{
+  "Success": 1,
+  "UserID": 7,
+  "UserLogin": "no.queues.agent@example.com",
+  "UserFullname": "No Queues Agent",
+  "Queues": [],
+  "Errors": []
+}
+```
+
+A missing, inactive, or locked agent returns no user details or queues:
+
+```json
+{
+  "Success": 0,
+  "UserID": 5,
+  "UserLogin": "",
+  "UserFullname": "",
+  "Queues": [],
+  "Errors": [
+    "Agent not found or is not active."
+  ]
+}
+```
+
+For an integration UI, call `/Agent/{UserID}/AssignableQueues` after owner
+selection to constrain queue choices. After queue selection, call
+`/Queue/{QueueID}/AssignableAgents` to constrain owner choices.
+`/TicketMoveAssign/Validate` remains the final authority before execution.
 
 ### Queues
 
@@ -1741,7 +1811,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.4.1.opm
+/path/to/output/ZnunyAgentList-1.5.0.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1750,14 +1820,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.4.1.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.5.0.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.4.1.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.5.0.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:
@@ -1838,7 +1908,7 @@ Kernel/Config/Files/XML/ZnunyAgentList.xml
 Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm
 Kernel/GenericInterface/Operation/ZnunyAgentList/Config.pm
 Kernel/GenericInterface/Operation/ZnunyAgentList/Health.pm
-Kernel/GenericInterface/Operation/User/AgentList.pm
+Kernel/GenericInterface/Operation/User/*.pm
 Kernel/GenericInterface/Operation/Queue/*.pm
 Kernel/GenericInterface/Operation/CustomerUser/*.pm
 Kernel/GenericInterface/Operation/Ticket/*.pm
@@ -1849,6 +1919,8 @@ Repository-only helpers:
 ```text
 scripts/verify-source.sh
 scripts/build-package.sh
+scripts/test-assignable-queues.pl
+scripts/test-move-assign-validation.pl
 scripts/test-advanced-znuny-agentlist-all.sh
 examples/webservices/AdvancedZnunyAgentListREST.yml
 ```

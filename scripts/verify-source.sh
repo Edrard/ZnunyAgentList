@@ -46,6 +46,8 @@ require_file 'Kernel/Config/Files/XML/ZnunyAgentList.xml'
 require_file 'scripts/verify-source.sh'
 require_file 'scripts/build-package.sh'
 require_file 'scripts/test-move-assign-validation.pl'
+require_file 'scripts/test-assignable-queues.pl'
+require_file 'Kernel/GenericInterface/Operation/User/AssignableQueues.pm'
 require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 
 SOPM="$ROOT/ZnunyAgentList.sopm"
@@ -67,8 +69,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.4.1' ]; then
-        pass 'SOPM version is 1.4.1'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.5.0' ]; then
+        pass 'SOPM version is 1.5.0'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -158,6 +160,7 @@ else
         'GenericInterface::Operation::Module###Ticket::Lock' \
         'GenericInterface::Operation::Module###Ticket::Unlock' \
         'GenericInterface::Operation::Module###Queue::AssignableAgents' \
+        'GenericInterface::Operation::Module###User::AssignableQueues' \
         'GenericInterface::Operation::Module###Ticket::MoveAssignValidate' \
         'GenericInterface::Operation::Module###Ticket::MoveAssign' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Config' \
@@ -229,6 +232,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         'Ticket::TicketHistoryGet' \
         'Ticket::TicketUpdate' \
         'User::AgentList' \
+        'User::AssignableQueues' \
         'Queue::List' \
         'Queue::Get' \
         'Queue::AssignableAgents' \
@@ -268,6 +272,7 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/TicketList' \
         '/TicketHistory/:TicketID' \
         '/Agent' \
+        '/Agent/:UserID/AssignableQueues' \
         '/Queue' \
         '/Queue/:QueueID' \
         '/QueueByName/:Name' \
@@ -416,6 +421,38 @@ if grep -Fq 'AuthenticateReadAgent' "$ROOT/Kernel/GenericInterface/Operation/Que
     pass 'Assignable agents use read authorization and Znuny owner permission logic'
 else
     fail 'Assignable agent authorization or owner permission logic was not found'
+fi
+
+ASSIGNABLE_QUEUES_FILE="$ROOT/Kernel/GenericInterface/Operation/User/AssignableQueues.pm"
+if grep -Fq 'AuthenticateReadAgent' "$ASSIGNABLE_QUEUES_FILE" \
+    && ! grep -Fq 'AuthenticateWriteAgent' "$ASSIGNABLE_QUEUES_FILE" \
+    && ! grep -Fq 'EnableTicketWriteOperations' "$ASSIGNABLE_QUEUES_FILE" \
+    && grep -Fq "Param( \%Param, 'UserID' )" "$ASSIGNABLE_QUEUES_FILE" \
+    && ! grep -Fq "Param( \%Param, 'UserLogin' )" "$ASSIGNABLE_QUEUES_FILE" \
+    && grep -Fq 'PermissionUserGet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq '$QueueObject->QueueList( Valid => 1 )' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Assignable queues use read auth, path UserID, valid queues, and Znuny owner permissions'
+else
+    fail 'Assignable queue authorization, input isolation, or permission logic was not found'
+fi
+
+if grep -Fq 'GET /Agent/{UserID}/AssignableQueues' "$ROOT/README.md" \
+    && grep -Fq 'active agent with no assignable queues' "$ROOT/README.md" \
+    && grep -Fq 'missing, inactive, or locked agent' "$ROOT/README.md" \
+    && grep -Fq 'GET /Queue/{QueueID}/AssignableAgents' "$ROOT/README.md"; then
+    pass 'README documents assignable queue success, empty, error, and reverse lookup behavior'
+else
+    fail 'README assignable queue behavior documentation is incomplete'
+fi
+
+if command -v perl >/dev/null 2>&1; then
+    if perl "$ROOT/scripts/test-assignable-queues.pl"; then
+        pass 'Assignable queues regression harness passed'
+    else
+        fail 'Assignable queues regression harness failed'
+    fi
+else
+    fail 'Perl is required for the assignable queues regression harness'
 fi
 
 if grep -E "Param\(.*'(Subject|Body|Kind|Reason|ArticleType|SenderType|HistoryType|HistoryComment|From|To|Cc|Bcc|MimeType|Charset)'" \

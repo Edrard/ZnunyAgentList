@@ -93,6 +93,17 @@
             </Hash>
         </Value>
     </Setting>
+    <Setting Name="GenericInterface::Operation::Module###User::AssignableQueues" Required="0" Valid="1">
+        <Description Translatable="1">GenericInterface operation module registration for the read-only agent assignable queue list operation.</Description>
+        <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
+        <Value>
+            <Hash>
+                <Item Key="Name">AssignableQueues</Item>
+                <Item Key="Controller">User</Item>
+                <Item Key="ConfigDialog">AdminGenericInterfaceOperationDefault</Item>
+            </Hash>
+        </Value>
+    </Setting>
     <Setting Name="GenericInterface::Operation::Module###Queue::AssignableAgents" Required="0" Valid="1">
         <Description Translatable="1">GenericInterface operation module registration for the read-only assignable agent list operation.</Description>
         <Navigation>GenericInterface::Operation::ModuleRegistration</Navigation>
