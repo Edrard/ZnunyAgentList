@@ -45,6 +45,7 @@ require_file 'ZnunyAgentList.sopm'
 require_file 'Kernel/Config/Files/XML/ZnunyAgentList.xml'
 require_file 'scripts/verify-source.sh'
 require_file 'scripts/build-package.sh'
+require_file 'scripts/test-move-assign-validation.pl'
 require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 
 SOPM="$ROOT/ZnunyAgentList.sopm"
@@ -66,8 +67,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.3.0' ]; then
-        pass 'SOPM version is 1.3.0'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.3.1' ]; then
+        pass 'SOPM version is 1.3.1'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -375,10 +376,22 @@ INLINE_MOVE_ASSIGN_PARAM=$(grep -n -E '=>.*ZnunyAgentList::Common->Param\(' \
     "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" || true)
 if [ -z "$INLINE_MOVE_ASSIGN_PARAM" ] \
     && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
-    && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm"; then
-    pass 'Move/assign request parameters are captured in scalar context before target resolution'
+    && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
+    && grep -Fq "DataParam( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    && grep -Fq "DataParam( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm"; then
+    pass 'Move/assign parameters preserve scalar context and isolate target owner login from authentication'
 else
-    fail 'Move/assign request parameter list can collapse when an optional value is absent'
+    fail 'Move/assign request parameters can collapse or reuse authentication UserLogin as target owner'
+fi
+
+if command -v perl >/dev/null 2>&1; then
+    if perl "$ROOT/scripts/test-move-assign-validation.pl"; then
+        pass 'Move/assign validation regression harness passed'
+    else
+        fail 'Move/assign validation regression harness failed'
+    fi
+else
+    fail 'Perl is required for the move/assign validation regression harness'
 fi
 
 if grep -Fq 'AuthenticateReadAgent' "$ROOT/Kernel/GenericInterface/Operation/Queue/AssignableAgents.pm" \

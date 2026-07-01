@@ -1,5 +1,12 @@
 # ZnunyAgentList Changelog
 
+## 1.3.1 - Unreleased
+
+- Fixed queue-only validation treating authentication `UserLogin` as a target owner.
+- Kept the current owner in `Target` and `RequiredNote` at `0` for queue-only validation.
+- Ensured queue-only execution does not call `TicketOwnerSet`.
+- Bumped the package version so Znuny can perform a clean package upgrade.
+
 ## 1.3.0 - Unreleased
 
 - Added `Queue::AssignableAgents` for active agents with Znuny owner permission in a queue.

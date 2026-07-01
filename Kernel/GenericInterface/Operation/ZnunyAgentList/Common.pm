@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.3.0';
+use constant PACKAGE_VERSION => '1.3.1';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -204,6 +204,16 @@ sub Param {
     }
 
     return;
+}
+
+sub DataParam {
+    my ( $Class, $ParamRef, $Name ) = @_;
+
+    return undef if !$ParamRef || !$Name;
+    return undef if ref $ParamRef->{Data} ne 'HASH';
+    return undef if !exists $ParamRef->{Data}->{$Name};
+
+    return $ParamRef->{Data}->{$Name};
 }
 
 sub CleanString {
