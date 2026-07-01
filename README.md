@@ -4,7 +4,7 @@
 integration systems such as Laravel, Zabbix, monitoring tools, and service
 automation jobs.
 
-Current package version: `1.2.11`.
+Current package version: `1.3.0`.
 
 The package provides a controlled REST surface for:
 
@@ -345,6 +345,13 @@ one identity are supplied, the numeric ID is authoritative and a mismatch is
 reported as a warning. The ticket, queue, active owner, target queue owner
 permission, and move permission are checked before either mutation runs.
 
+Queue fields are optional for owner-only changes; when omitted, the current
+ticket queue becomes the target queue for owner permission validation. Owner
+fields are optional for queue-only changes; when omitted, the current owner is
+preserved in the `Target` snapshot. Validation returns populated `Current` data
+once the ticket is resolved and populated `Target` data once both target values
+can be resolved, including when a later validation rule fails.
+
 Owner changes require a non-empty `Note`. Queue-only changes do not require a
 note. A queue-only change with a note creates one controlled internal note;
 owner changes pass the note to the standard Znuny owner-change API and do not
@@ -495,7 +502,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.11",
+  "Version": "1.3.0",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -508,7 +515,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.2.11",
+  "Version": "1.3.0",
   "Features": {
     "AgentList": 1,
     "QueueList": 1,
@@ -1303,7 +1310,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.2.11.opm
+/path/to/output/ZnunyAgentList-1.3.0.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1312,14 +1319,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.2.11.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.3.0.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.2.11.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.3.0.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

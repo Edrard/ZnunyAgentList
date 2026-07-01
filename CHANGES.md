@@ -1,12 +1,15 @@
 # ZnunyAgentList Changelog
 
-## 1.2.11 - Unreleased
+## 1.3.0 - Unreleased
 
 - Added `Queue::AssignableAgents` for active agents with Znuny owner permission in a queue.
 - Added the non-mutating `Ticket::MoveAssignValidate` preflight operation.
 - Added controlled `Ticket::MoveAssign` queue and owner changes through standard Znuny APIs.
 - Required a note for owner changes while allowing queue-only changes without a note.
 - Kept the workflow free of raw SQL and any custom unrestricted runtime `TicketUpdate` operation.
+- Fixed owner-only validation to use the current queue when no target queue is provided.
+- Fixed queue-only validation to return populated `Current` and `Target` snapshots.
+- Applied the corrected target resolution to move/assign execution.
 
 ## 1.2.10 - Unreleased
 
