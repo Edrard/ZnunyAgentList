@@ -95,6 +95,9 @@ sub HasError {
         };
     };
     local *Kernel::GenericInterface::Operation::ZnunyAgentList::Common::OwnerData = sub {
+        my ( $Class, %Param ) = @_;
+        return if $Param{OwnerID} && $Param{OwnerID} == 5;
+
         return {
             OwnerID       => 31,
             OwnerLogin    => 'target.agent',
@@ -192,6 +195,30 @@ sub HasError {
     Assert( $QueueUpdateCalls == 1, 'queue-only execution must update queue once' );
     Assert( $CustomerUpdateCalls == 0 && $OwnerUpdateCalls == 0, 'queue-only execution must not update customer or owner' );
 
+    $OwnerAllowed = 0;
+    my $DeniedQueueOnly = ValidationFromRequest(
+        {
+            Data => {
+                TicketID => 57467,
+                QueueID  => 49,
+            },
+        }
+    );
+    Assert( !$DeniedQueueOnly->{Valid}, 'queue-only request must reject a current owner not assignable in target queue' );
+    Assert( HasError( $DeniedQueueOnly, 'Target owner is not assignable in target queue.' ), 'queue-only rejection must be clear' );
+
+    $QueueUpdateCalls = $CustomerUpdateCalls = $OwnerUpdateCalls = $ArticleCalls = 0;
+    @MutationOrder = ();
+    my $DeniedQueueOnlyExecution = $Operation->Run(
+        Data => {
+            TicketID => 57467,
+            QueueID  => 49,
+        },
+    );
+    Assert( !$DeniedQueueOnlyExecution->{Data}->{Success}, 'denied queue-only execution must fail validation' );
+    Assert( $QueueUpdateCalls + $CustomerUpdateCalls + $OwnerUpdateCalls == 0, 'denied queue-only execution must not mutate' );
+    $OwnerAllowed = 1;
+
     $QueueUpdateCalls = $CustomerUpdateCalls = $OwnerUpdateCalls = $ArticleCalls = 0;
     @MutationOrder = ();
     my $QueueCustomer = ValidationFromRequest(
@@ -220,6 +247,32 @@ sub HasError {
     Assert( $OwnerUpdateCalls == 0 && $ArticleCalls == 0, 'queue and customer must not update owner or create note' );
     Assert( join( q{,}, @MutationOrder ) eq 'queue,customer', 'queue and customer execution order must be stable' );
 
+    $OwnerAllowed = 0;
+    $QueueUpdateCalls = $CustomerUpdateCalls = $OwnerUpdateCalls = $ArticleCalls = 0;
+    @MutationOrder = ();
+    my $DeniedQueueCustomer = $Operation->Run(
+        Data => {
+            TicketID      => 57467,
+            QueueID       => 49,
+            CustomerUserID => 'target.customer',
+        },
+    );
+    Assert( !$DeniedQueueCustomer->{Data}->{Success}, 'queue and customer must reject an unassignable current owner' );
+    Assert( $QueueUpdateCalls + $CustomerUpdateCalls + $OwnerUpdateCalls == 0, 'denied queue and customer must not mutate' );
+
+    my $SameQueueCustomer = ValidationFromRequest(
+        {
+            Data => {
+                TicketID      => 57467,
+                QueueID       => 3,
+                CustomerUserID => 'target.customer',
+            },
+        }
+    );
+    Assert( $SameQueueCustomer->{Valid}, 'same-queue customer change must not add an owner permission failure' );
+    Assert( !$SameQueueCustomer->{QueueChanged} && $SameQueueCustomer->{CustomerChanged}, 'same-queue customer change must change only customer' );
+    $OwnerAllowed = 1;
+
     my $OwnerCustomerWithoutNote = ValidationFromRequest(
         {
             Data => {
@@ -231,6 +284,7 @@ sub HasError {
     );
     Assert( !$OwnerCustomerWithoutNote->{Valid}, 'owner and customer without note must be invalid' );
     Assert( $OwnerCustomerWithoutNote->{RequiredNote}, 'owner and customer must require note' );
+    Assert( @{ $OwnerCustomerWithoutNote->{Errors} } == 1, 'owner and customer without note must fail only the note rule' );
 
     my $OwnerCustomerWithNote = ValidationFromRequest(
         {
@@ -244,6 +298,30 @@ sub HasError {
     );
     Assert( $OwnerCustomerWithNote->{Valid}, 'owner and customer with note must be valid' );
     Assert( $OwnerCustomerWithNote->{OwnerChanged}, 'OwnerLogin must remain the target owner input' );
+
+    my $LockedOwner = ValidationFromRequest(
+        {
+            Data => {
+                TicketID => 57467,
+                OwnerID  => 5,
+                Note     => 'Locked owner must remain unavailable.',
+            },
+        }
+    );
+    Assert( !$LockedOwner->{Valid}, 'locked owner must remain invalid' );
+    Assert( HasError( $LockedOwner, 'Target owner not found or is not active.' ), 'locked owner must return the active-owner error' );
+
+    my $AllowedQueueOwner = ValidationFromRequest(
+        {
+            Data => {
+                TicketID => 57467,
+                QueueID  => 49,
+                OwnerID  => 31,
+                Note     => 'Permission check.',
+            },
+        }
+    );
+    Assert( $AllowedQueueOwner->{Valid}, 'queue and owner must validate when target owner is assignable' );
 
     $QueueUpdateCalls = $CustomerUpdateCalls = $OwnerUpdateCalls = $ArticleCalls = 0;
     @MutationOrder = ();
@@ -260,6 +338,21 @@ sub HasError {
     Assert( $QueueUpdateCalls == 1 && $CustomerUpdateCalls == 1 && $OwnerUpdateCalls == 1, 'all targets must update once' );
     Assert( $ArticleCalls == 0, 'owner change must not create a duplicate wrapper note' );
     Assert( join( q{,}, @MutationOrder ) eq 'queue,customer,owner', 'combined execution order must be queue, customer, owner' );
+
+    $OwnerAllowed = 0;
+    my $DeniedQueueOwner = ValidationFromRequest(
+        {
+            Data => {
+                TicketID => 57467,
+                QueueID  => 49,
+                OwnerID  => 31,
+                Note     => 'Permission check.',
+            },
+        }
+    );
+    Assert( !$DeniedQueueOwner->{Valid}, 'queue and owner must reject an unassignable target owner' );
+    Assert( HasError( $DeniedQueueOwner, 'Target owner is not assignable in target queue.' ), 'queue and owner denial must be clear' );
+    $OwnerAllowed = 1;
 
     $QueueUpdateCalls = $CustomerUpdateCalls = $OwnerUpdateCalls = $ArticleCalls = 0;
     @MutationOrder = ();

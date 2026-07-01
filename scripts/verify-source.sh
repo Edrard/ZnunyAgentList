@@ -67,8 +67,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.4.0' ]; then
-        pass 'SOPM version is 1.4.0'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.4.1' ]; then
+        pass 'SOPM version is 1.4.1'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -365,10 +365,11 @@ fi
 if grep -Fq 'MoveAssignValidation(' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
     && grep -Fq 'MoveAssignValidation(' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
     && grep -Fq 'TicketQueueMoveAllowed(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
-    && grep -Fq 'OwnerCanOwnQueue(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
-    pass 'Move/assign validate and execute operations share permission-aware preflight validation'
+    && grep -Fq 'OwnerCanOwnQueue(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq '( $QueueChanged || $OwnerChanged )' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Move/assign operations share final target owner/queue permission validation'
 else
-    fail 'Controlled move/assign shared validation was not found'
+    fail 'Controlled move/assign final target owner/queue validation was not found'
 fi
 
 INLINE_MOVE_ASSIGN_PARAM=$(grep -n -E '=>.*ZnunyAgentList::Common->Param\(' \
