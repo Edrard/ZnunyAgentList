@@ -67,8 +67,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.3.1' ]; then
-        pass 'SOPM version is 1.3.1'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.3.2' ]; then
+        pass 'SOPM version is 1.3.2'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -377,11 +377,13 @@ INLINE_MOVE_ASSIGN_PARAM=$(grep -n -E '=>.*ZnunyAgentList::Common->Param\(' \
 if [ -z "$INLINE_MOVE_ASSIGN_PARAM" ] \
     && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
     && grep -Fq 'QueueID   => $RawQueueID' "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
-    && grep -Fq "DataParam( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
-    && grep -Fq "DataParam( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm"; then
-    pass 'Move/assign parameters preserve scalar context and isolate target owner login from authentication'
+    && grep -Fq "Param( \\%Param, 'OwnerLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    && grep -Fq "Param( \\%Param, 'OwnerLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm" \
+    && ! grep -Fq "Param( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssignValidate.pm" \
+    && ! grep -Fq "Param( \\%Param, 'UserLogin' )" "$ROOT/Kernel/GenericInterface/Operation/Ticket/MoveAssign.pm"; then
+    pass 'Move/assign target owner uses OwnerLogin and never authentication UserLogin'
 else
-    fail 'Move/assign request parameters can collapse or reuse authentication UserLogin as target owner'
+    fail 'Move/assign target owner input is not isolated from authentication UserLogin'
 fi
 
 if command -v perl >/dev/null 2>&1; then

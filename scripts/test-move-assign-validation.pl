@@ -29,7 +29,7 @@ sub ValidationFromRequest {
     my $QueueID   = $Class->Param( $Request, 'QueueID' );
     my $QueueName = $Class->Param( $Request, 'QueueName' );
     my $OwnerID   = $Class->Param( $Request, 'OwnerID' );
-    my $UserLogin = $Class->DataParam( $Request, 'UserLogin' );
+    my $OwnerLogin = $Class->Param( $Request, 'OwnerLogin' );
     my $Note      = $Class->Param( $Request, 'Note' );
 
     return $Class->MoveAssignValidation(
@@ -37,7 +37,7 @@ sub ValidationFromRequest {
         QueueID   => $QueueID,
         QueueName => $QueueName,
         OwnerID   => $OwnerID,
-        UserLogin => $UserLogin,
+        OwnerLogin => $OwnerLogin,
         Note      => $Note,
         UserID    => 2,
     );
@@ -136,12 +136,26 @@ sub ValidationFromRequest {
     Assert( $OwnerWithNote->{Target}->{QueueID} == 3, 'owner-only target must use current queue' );
     Assert( $OwnerWithNote->{Target}->{OwnerID} == 31, 'owner-only target must use requested owner' );
 
+    my $OwnerByLogin = ValidationFromRequest(
+        {
+            UserLogin => 'auth.agent',
+            Data      => {
+                TicketID  => 57467,
+                OwnerLogin => 'target.agent',
+                Note      => 'Assign by target owner login.',
+            },
+        }
+    );
+    Assert( $OwnerByLogin->{Valid}, 'owner-only request by OwnerLogin must be valid' );
+    Assert( $OwnerByLogin->{Target}->{OwnerID} == 31, 'OwnerLogin must resolve the target owner' );
+
     my $QueueOnly = ValidationFromRequest(
         {
             UserLogin => 'auth.agent',
             Data      => {
                 TicketID => 57467,
                 QueueID  => 49,
+                UserLogin => 'auth.agent',
             },
         }
     );
@@ -157,6 +171,7 @@ sub ValidationFromRequest {
             Data      => {
                 TicketID => 57467,
                 QueueID  => 49,
+                UserLogin => 'auth.agent',
                 Note     => 'Move to the project queue.',
             },
         }
@@ -170,6 +185,7 @@ sub ValidationFromRequest {
         Data      => {
             TicketID => 57467,
             QueueID  => 49,
+            UserLogin => 'auth.agent',
         },
     );
     Assert( $QueueExecution->{Data}->{Success}, 'queue-only execution must succeed' );
@@ -182,6 +198,7 @@ sub ValidationFromRequest {
         Data      => {
             TicketID => 57467,
             QueueID  => 49,
+            UserLogin => 'auth.agent',
             Note     => 'Move to the project queue.',
         },
     );
@@ -195,10 +212,18 @@ sub ValidationFromRequest {
             UserLogin => 'auth.agent',
             Data      => {
                 TicketID => 57467,
+                UserLogin => 'auth.agent',
             },
         }
     );
     Assert( !$TicketOnly->{Valid}, 'TicketID-only request must be invalid' );
+    Assert( !$TicketOnly->{RequiredNote}, 'TicketID-only request must not require note' );
+    Assert( !$TicketOnly->{OwnerChanged}, 'TicketID-only request must not become an owner change' );
+    Assert( $TicketOnly->{Target}->{OwnerID} == 2, 'TicketID-only target must preserve current owner' );
+    Assert(
+        @{ $TicketOnly->{Errors} } == 1 && $TicketOnly->{Errors}->[0] eq 'At least one target change is required.',
+        'TicketID-only request must return the no-target-change error',
+    );
 }
 
 print "PASS: move/assign validation regression checks\n";

@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256_hex);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.3.1';
+use constant PACKAGE_VERSION => '1.3.2';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -204,16 +204,6 @@ sub Param {
     }
 
     return;
-}
-
-sub DataParam {
-    my ( $Class, $ParamRef, $Name ) = @_;
-
-    return undef if !$ParamRef || !$Name;
-    return undef if ref $ParamRef->{Data} ne 'HASH';
-    return undef if !exists $ParamRef->{Data}->{$Name};
-
-    return $ParamRef->{Data}->{$Name};
 }
 
 sub CleanString {
@@ -892,7 +882,7 @@ sub MoveAssignValidation {
     my $RawQueueID   = $Class->SafeString( $Param{QueueID}, 32 );
     my $RawQueueName = $Class->SafeString( $Param{QueueName}, 255 );
     my $RawOwnerID   = $Class->SafeString( $Param{OwnerID}, 32 );
-    my $RawUserLogin = $Class->SafeString( $Param{UserLogin}, 255 );
+    my $RawOwnerLogin = $Class->SafeString( $Param{OwnerLogin}, 255 );
     my $Note         = $Class->SafeString( $Param{Note}, 4000 );
 
     push @Errors, 'TicketID is required and must be a positive integer.' if !$TicketID;
@@ -900,8 +890,8 @@ sub MoveAssignValidation {
     push @Errors, 'OwnerID must be a positive integer.' if $RawOwnerID ne q{} && !$Class->PositiveInt($RawOwnerID);
 
     my $QueueRequested = $RawQueueID ne q{} || $RawQueueName ne q{};
-    my $OwnerRequested = $RawOwnerID ne q{} || $RawUserLogin ne q{};
-    push @Errors, 'QueueID or QueueName, or OwnerID or UserLogin, is required.' if !$QueueRequested && !$OwnerRequested;
+    my $OwnerRequested = $RawOwnerID ne q{} || $RawOwnerLogin ne q{};
+    push @Errors, 'At least one target change is required.' if !$QueueRequested && !$OwnerRequested;
 
     my $Ticket;
     if ( $TicketID && $UserID ) {
@@ -935,11 +925,11 @@ sub MoveAssignValidation {
         if ($OwnerRequested) {
             $TargetOwner = $RawOwnerID ne q{}
                 ? $Class->OwnerData( OwnerID => $RawOwnerID )
-                : $Class->OwnerData( UserLogin => $RawUserLogin );
+                : $Class->OwnerData( UserLogin => $RawOwnerLogin );
             push @Errors, 'Target owner not found or is not active.' if !$TargetOwner;
 
-            if ( $TargetOwner && $RawOwnerID ne q{} && $RawUserLogin ne q{} && $TargetOwner->{OwnerLogin} ne $RawUserLogin ) {
-                push @Warnings, 'UserLogin does not match OwnerID; OwnerID was used.';
+            if ( $TargetOwner && $RawOwnerID ne q{} && $RawOwnerLogin ne q{} && $TargetOwner->{OwnerLogin} ne $RawOwnerLogin ) {
+                push @Warnings, 'OwnerLogin does not match OwnerID; OwnerID was used.';
             }
         }
         else {
@@ -980,7 +970,7 @@ sub MoveAssignValidation {
 
     push @Errors, 'Note is required when owner changes.' if $RequiredNote && $Note eq q{};
 
-    if ( $Ticket && !$QueueChanged && !$OwnerChanged ) {
+    if ( $Ticket && ( $QueueRequested || $OwnerRequested ) && !$QueueChanged && !$OwnerChanged ) {
         push @Warnings, 'Requested queue and owner already match the ticket.';
         push @Errors, 'No queue or owner change would be made.';
     }

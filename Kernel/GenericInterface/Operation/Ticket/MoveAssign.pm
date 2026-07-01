@@ -25,7 +25,7 @@ sub Run {
     my $RawQueueID   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueID' );
     my $RawQueueName = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'QueueName' );
     my $RawOwnerID   = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerID' );
-    my $RawUserLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->DataParam( \%Param, 'UserLogin' );
+    my $RawOwnerLogin = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'OwnerLogin' );
     my $RawNote      = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'Note' );
 
     my $Validation = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->MoveAssignValidation(
@@ -33,7 +33,7 @@ sub Run {
         QueueID   => $RawQueueID,
         QueueName => $RawQueueName,
         OwnerID   => $RawOwnerID,
-        UserLogin => $RawUserLogin,
+        OwnerLogin => $RawOwnerLogin,
         Note      => $RawNote,
         UserID    => $UserID,
     );
