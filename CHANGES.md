@@ -5,6 +5,7 @@
 - Added `GET /Agent/{UserID}/AssignableQueues` as the reverse lookup for `GET /Queue/{QueueID}/AssignableAgents`.
 - Returns only valid queues where the selected active agent may own tickets.
 - Uses standard Znuny owner group permissions without raw SQL or write authorization.
+- Expanded README examples for active, broad, empty, inactive, and missing agent queue lookups plus UI integration guidance.
 
 ## 1.4.1 - Unreleased
 

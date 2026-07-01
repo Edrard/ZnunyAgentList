@@ -668,7 +668,7 @@ In this example, current `OwnerID=6` is not assignable in target `QueueID=3`.
     "QueueID": 3,
     "QueueName": "Junk",
     "OwnerID": 6,
-    "OwnerLogin": "limited.agent@example.com"
+    "OwnerLogin": "ruslan.yakovlev@vamark.com"
   },
   "Errors": [
     "Target owner is not assignable in target queue."
@@ -762,6 +762,14 @@ curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign/Validate?UserLogin=$ZNUNY_API
 ```
 
 #### Integration Guidance
+
+A UI can use `/Agent/{UserID}/AssignableQueues` and
+`/Queue/{QueueID}/AssignableAgents` to constrain owner and queue choices, but it
+must still call `/TicketMoveAssign/Validate` as the final preflight. Validation
+checks the resolved target owner and target queue together and rejects
+queue-only moves with `Target owner is not assignable in target queue.` when the
+current owner cannot operate in the target queue, as shown in the permission
+failure example above.
 
 A Laravel or other integration should use customer user search to select a
 customer, send `CustomerUserID` to `/TicketMoveAssign/Validate`, show `Current`,
@@ -968,15 +976,22 @@ GenericTicketConnector response shapes and are not documented in detail here.
 }
 ```
 
-### Agent Assignable Queues
+### GET /Agent/{UserID}/AssignableQueues
 
-`GET /Agent/{UserID}/AssignableQueues` is the reverse lookup for
-`GET /Queue/{QueueID}/AssignableAgents`. `UserID` identifies the target agent;
-authentication `UserLogin` remains authentication-only.
+Returns valid queues where the selected active agent can be assigned as ticket
+owner. It is the reverse lookup for `GET /Queue/{QueueID}/AssignableAgents`.
 
-The endpoint requires the normal read authorization model and does not require
-`ZnunyAgentList::EnableTicketWriteOperations`. It returns only valid queues
-where the selected active agent has Znuny `owner` permission.
+#### Input And Authentication
+
+| Value | Meaning |
+| --- | --- |
+| Path `UserID` | Target agent numeric ID. |
+| Query `UserLogin` | GenericInterface authentication login only. |
+| Query `Password` | GenericInterface authentication password. |
+
+Authentication `UserLogin` is never interpreted as the target agent. The
+endpoint uses normal read authorization and does not require
+`ZnunyAgentList::EnableTicketWriteOperations`.
 
 ```bash
 curl -skG "$ZNUNY_BASE_URL/Agent/6/AssignableQueues" \
@@ -984,14 +999,31 @@ curl -skG "$ZNUNY_BASE_URL/Agent/6/AssignableQueues" \
   --data-urlencode "Password=$ZNUNY_API_PASS"
 ```
 
-Active agent with assignable queues:
+#### Response Contract
+
+The response contains only `Success`, `UserID`, `UserLogin`, `UserFullname`,
+`Queues`, and `Errors`. Each queue contains only `QueueID`, `Name`, and
+`FullName`.
+
+- The agent must exist and be active.
+- Only valid queues are returned.
+- Queue access uses standard Znuny `owner` permission logic without raw SQL.
+- An active agent with no assignable queues returns `Success=1`, `Queues=[]`,
+  and `Errors=[]`.
+- A missing, inactive, or locked agent returns `Success=0`, empty user details,
+  `Queues=[]`, and a clear error.
+
+#### Active Limited Owner
+
+Runtime validation confirmed that `UserID=6` can be assigned only in
+`QueueID=49`:
 
 ```json
 {
   "Success": 1,
   "UserID": 6,
-  "UserLogin": "limited.agent@example.com",
-  "UserFullname": "Limited Agent",
+  "UserLogin": "ruslan.yakovlev@vamark.com",
+  "UserFullname": "Ruslan Yakovlev",
   "Queues": [
     {
       "QueueID": 49,
@@ -1003,20 +1035,54 @@ Active agent with assignable queues:
 }
 ```
 
-An active agent with no assignable queues is still a successful lookup:
+In this example, the agent can be assigned only in `QueueID=49` and does not
+appear in `QueueID=3` (`Junk`).
+
+#### Active Owner With Many Queues
+
+Runtime validation for `UserID=2` returned many valid queues. This shortened
+example shows only two of them:
 
 ```json
 {
   "Success": 1,
-  "UserID": 7,
-  "UserLogin": "no.queues.agent@example.com",
-  "UserFullname": "No Queues Agent",
+  "UserID": 2,
+  "UserLogin": "uav@vamark.com",
+  "UserFullname": "Oleksandr Ustinov",
+  "Queues": [
+    {
+      "QueueID": 3,
+      "Name": "Junk",
+      "FullName": "Junk"
+    },
+    {
+      "QueueID": 49,
+      "Name": "Vamark Projects",
+      "FullName": "Vamark Projects"
+    }
+  ],
+  "Errors": []
+}
+```
+
+#### Active Agent With No Queues
+
+This is a successful lookup with an empty assignment set:
+
+```json
+{
+  "Success": 1,
+  "UserID": 42,
+  "UserLogin": "agent.without.queues@example.com",
+  "UserFullname": "Agent Without Queues",
   "Queues": [],
   "Errors": []
 }
 ```
 
-A missing, inactive, or locked agent returns no user details or queues:
+#### Inactive Or Locked Agent
+
+Runtime validation confirmed rejection of locked/inactive `UserID=5`:
 
 ```json
 {
@@ -1031,10 +1097,36 @@ A missing, inactive, or locked agent returns no user details or queues:
 }
 ```
 
-For an integration UI, call `/Agent/{UserID}/AssignableQueues` after owner
-selection to constrain queue choices. After queue selection, call
-`/Queue/{QueueID}/AssignableAgents` to constrain owner choices.
-`/TicketMoveAssign/Validate` remains the final authority before execution.
+#### Missing Agent
+
+Runtime validation confirmed the same safe error contract for a missing agent:
+
+```json
+{
+  "Success": 0,
+  "UserID": 999999,
+  "UserLogin": "",
+  "UserFullname": "",
+  "Queues": [],
+  "Errors": [
+    "Agent not found or is not active."
+  ]
+}
+```
+
+#### Relationship To Queue Lookup
+
+- `GET /Agent/6/AssignableQueues` answers: Which queues can this owner work in?
+- `GET /Queue/49/AssignableAgents` answers: Which owners can work in this queue?
+
+Runtime validation confirmed that `UserID=6` is returned for `QueueID=49`, is
+not returned for `QueueID=3`, and `/Agent/6/AssignableQueues` returns only
+`QueueID=49`.
+
+For a Laravel or other integration UI, use `/Agent/{UserID}/AssignableQueues`
+after owner selection and `/Queue/{QueueID}/AssignableAgents` after queue
+selection. These lookups guide the UI, but `/TicketMoveAssign/Validate` remains
+the final authority before execution.
 
 ### Queues
 

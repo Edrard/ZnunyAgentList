@@ -439,7 +439,11 @@ fi
 if grep -Fq 'GET /Agent/{UserID}/AssignableQueues' "$ROOT/README.md" \
     && grep -Fq 'active agent with no assignable queues' "$ROOT/README.md" \
     && grep -Fq 'missing, inactive, or locked agent' "$ROOT/README.md" \
-    && grep -Fq 'GET /Queue/{QueueID}/AssignableAgents' "$ROOT/README.md"; then
+    && grep -Fq 'GET /Queue/{QueueID}/AssignableAgents' "$ROOT/README.md" \
+    && grep -Fq 'Agent not found or is not active.' "$ROOT/README.md" \
+    && grep -Fq 'Target owner is not assignable in target queue.' "$ROOT/README.md" \
+    && grep -Fq 'Queues=[]' "$ROOT/README.md" \
+    && grep -Fq '$ZNUNY_BASE_URL/Agent/6/AssignableQueues' "$ROOT/README.md"; then
     pass 'README documents assignable queue success, empty, error, and reverse lookup behavior'
 else
     fail 'README assignable queue behavior documentation is incomplete'
