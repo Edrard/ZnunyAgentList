@@ -21,12 +21,25 @@ sub Run {
         return $AuthError;
     }
 
-    my %Input = map {
-        $_ => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, $_ )
-    } qw(CurrentLogin CustomerUserLogin FirstName LastName Login Email CustomerID);
-    $Input{PasswordProvided} = exists $Param{Password}
-        || exists $Param{UserPassword}
-        || ( ref $Param{Data} eq 'HASH' && ( exists $Param{Data}->{Password} || exists $Param{Data}->{UserPassword} ) );
+    my %Input;
+
+    my $HasBody = ref $Param{Data} eq 'HASH' ? 1 : 0;
+
+    if ( Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ParamExists( \%Param, 'CustomerUserLogin' ) ) {
+        $Input{CustomerUserLogin} = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'CustomerUserLogin' );
+    }
+
+    for my $Field (qw(CurrentLogin FirstName LastName Login Email CustomerID)) {
+        if ( Kernel::GenericInterface::Operation::ZnunyAgentList::Common->BodyParamExists( \%Param, $Field ) ) {
+            $Input{$Field} = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->BodyParam( \%Param, $Field );
+        }
+        elsif ( !$HasBody && Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ParamExists( \%Param, $Field ) ) {
+            $Input{$Field} = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, $Field );
+        }
+    }
+
+    $Input{PasswordProvided} = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ParamExists( \%Param, 'Password' )
+        || Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ParamExists( \%Param, 'UserPassword' );
 
     my ( $CustomerUser, $Errors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
         %Input,

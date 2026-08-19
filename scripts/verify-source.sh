@@ -76,8 +76,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.6.0' ]; then
-        pass 'SOPM version is 1.6.0'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.6.1' ]; then
+        pass 'SOPM version is 1.6.1'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -530,7 +530,7 @@ if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'image/webp' "$ROOT/README.md"; then
     pass 'README documents customer/user company and inline attachment contracts'
 else
-    fail 'README documentation for 1.6.0 API additions is incomplete'
+    fail 'README documentation for 1.6.1 API additions is incomplete'
 fi
 
 if command -v perl >/dev/null 2>&1; then
@@ -546,7 +546,7 @@ if command -v perl >/dev/null 2>&1; then
         fail 'Customer user write regression harness failed'
     fi
 else
-    fail 'Perl is required for the 1.6.0 regression harnesses'
+    fail 'Perl is required for the 1.6.1 regression harnesses'
 fi
 
 if grep -E "Param\(.*'(Subject|Body|Kind|Reason|ArticleType|SenderType|HistoryType|HistoryComment|From|To|Cc|Bcc|MimeType|Charset)'" \

@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.0';
+use constant PACKAGE_VERSION => '1.6.1';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -205,6 +205,33 @@ sub Param {
     }
 
     return;
+}
+
+sub ParamExists {
+    my ( $Class, $ParamRef, $Name ) = @_;
+
+    return 0 if !$ParamRef || !$Name;
+    return 1 if exists $ParamRef->{$Name};
+    return 1 if ref $ParamRef->{Data} eq 'HASH' && exists $ParamRef->{Data}->{$Name};
+
+    return 0;
+}
+
+sub BodyParam {
+    my ( $Class, $ParamRef, $Name ) = @_;
+
+    return if !$ParamRef || !$Name || ref $ParamRef->{Data} ne 'HASH';
+    return if !exists $ParamRef->{Data}->{$Name};
+
+    return $ParamRef->{Data}->{$Name};
+}
+
+sub BodyParamExists {
+    my ( $Class, $ParamRef, $Name ) = @_;
+
+    return 0 if !$ParamRef || !$Name || ref $ParamRef->{Data} ne 'HASH';
+
+    return exists $ParamRef->{Data}->{$Name} ? 1 : 0;
 }
 
 sub CleanString {
@@ -573,8 +600,18 @@ sub NormalizeContentID {
 sub InlineImageContentType {
     my ( $Class, $Value ) = @_;
 
-    my $ContentType = lc $Class->SafeContentType($Value);
+    return q{} if !defined $Value || ref $Value;
+
+    my $ContentType = $Value;
+    $ContentType =~ s/[\x00-\x1f\x7f]//g;
+    $ContentType =~ s{\A\s+}{};
+    $ContentType =~ s{\s+\z}{};
     $ContentType =~ s{\s*;.*\z}{};
+    $ContentType =~ s{\A\s+}{};
+    $ContentType =~ s{\s+\z}{};
+    $ContentType = lc $ContentType;
+
+    return q{} if $ContentType !~ m{\A[a-z0-9][a-z0-9!#\$&^_.+-]*/[a-z0-9][a-z0-9!#\$&^_.+-]*\z};
 
     return 'image/jpeg' if $ContentType eq 'image/jpg';
 
@@ -873,7 +910,14 @@ sub CustomerUserUpdateData {
     return ( undef, ['Password input is not supported. Use the normal password reset workflow.'] )
         if $Param{PasswordProvided} || exists $Param{Password} || exists $Param{UserPassword};
 
-    my $CurrentLogin = $Class->SafeString( $Param{CurrentLogin} || $Param{CustomerUserLogin} || $Param{Login}, 255 );
+    my $RouteLogin = $Class->SafeString( $Param{CustomerUserLogin}, 255 );
+    my $CurrentLoginProvided = exists $Param{CurrentLogin};
+    my $BodyCurrentLogin = $CurrentLoginProvided ? $Class->SafeString( $Param{CurrentLogin}, 255 ) : q{};
+    if ( $RouteLogin ne q{} && $CurrentLoginProvided && $BodyCurrentLogin ne $RouteLogin ) {
+        return ( undef, ['CurrentLogin must match the route CustomerUserLogin.'] );
+    }
+
+    my $CurrentLogin = $RouteLogin ne q{} ? $RouteLogin : $BodyCurrentLogin;
     return ( undef, ['CurrentLogin is required.'] ) if $CurrentLogin eq q{};
 
     my ( $Existing, $LookupErrors ) = $Class->CustomerUserLookupData( Login => $CurrentLogin );

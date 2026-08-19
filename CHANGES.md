@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.6.1 - Unreleased
+
+- Fixed `CustomerUser::Update` so the route `CustomerUserLogin` is the authoritative current login when PATCH JSON body data is present.
+- Fixed partial customer-user updates to preserve omitted fields and avoid treating field names as values.
+- Fixed inline image MIME handling so values such as `image/jpeg; name="image003.jpg"` are accepted and returned as normalized allow-listed media types.
+
 ## 1.6.0 - Unreleased
 
 - Added `Ticket::InlineAttachmentGet` for read-only base64 retrieval of one inline image attachment by `TicketID`, `ArticleID`, and exact normalized `ContentID`.

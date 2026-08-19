@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.0`.
+Current package version: `1.6.1`.
 
 The package provides a controlled REST surface for:
 
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.0",
+  "Version": "1.6.1",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.0",
+  "Version": "1.6.1",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -1517,8 +1517,11 @@ one attachment in that article has the requested Content-ID. Attachment `FileID`
 is an article-local identifier and is never treated as a global database ID.
 
 Allowed MIME types are `image/png`, `image/jpeg`, `image/gif`, and `image/webp`.
-`image/jpg` is normalized to `image/jpeg`; SVG and non-image attachments are
-rejected. `Content` is returned as base64.
+MIME parameters from Znuny, such as `image/jpeg; name="image003.jpg"`, are
+accepted for matching but are never returned. The response `ContentType` is
+always the normalized allow-listed media type only. `image/jpg` is normalized to
+`image/jpeg`; SVG and non-image attachments are rejected. `Content` is returned
+as base64.
 
 Success:
 
@@ -2010,11 +2013,20 @@ password-reset workflow to receive a new password.
 }
 ```
 
-Unspecified fields are preserved. Password input is not supported for this REST
-endpoint, so Update does not change customer-user passwords. Login rename is
-supported through Znuny's native `CustomerUserUpdate(ID => CurrentLogin,
-UserLogin => Login, ...)` path by providing `Login`; if omitted, the login
-remains unchanged.
+The path `CustomerUserLogin` identifies the current customer user and is
+authoritative. Clients do not need to duplicate it as `CurrentLogin` in the JSON
+body. If `CurrentLogin` is supplied for compatibility, it must exactly match the
+path value or the request is rejected. Unspecified fields are preserved from the
+existing customer-user record: omitted `FirstName`, `LastName`, `Email`,
+`CustomerID`, and `Login` keep their current values. Password input is not
+supported for this REST endpoint, so Update does not change customer-user
+passwords.
+
+Login rename is supported through Znuny's native
+`CustomerUserUpdate(ID => CurrentLogin, UserLogin => Login, ...)` path by
+providing `Login`; if omitted or identical to the path login, the login remains
+unchanged. Duplicate target logins are rejected before calling Znuny's update
+API.
 
 ### Error Responses
 
@@ -2072,7 +2084,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.0.opm
+/path/to/output/ZnunyAgentList-1.6.1.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -2081,14 +2093,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.1.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.1.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

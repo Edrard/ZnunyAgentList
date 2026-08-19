@@ -58,7 +58,7 @@ sub Assert {
 
         return (
             Filename    => 'image003.jpg',
-            ContentType => 'image/jpg',
+            ContentType => 'image/jpeg; name="image003.jpg"',
             ContentID   => '<image003.jpg@01DD2EF7.2CE4B9D0>',
             Disposition => 'inline',
             FilesizeRaw => 7,
@@ -100,6 +100,28 @@ my $OM = bless {
         return { TicketID => 59078, TicketNumber => 'T59078' };
     };
 
+    for my $Case (
+        [ 'image/jpeg; name="image003.jpg"', 'image/jpeg' ],
+        [ 'IMAGE/JPEG; NAME="image003.jpg"', 'image/jpeg' ],
+        [ ' image/jpg ; name="image003.jpg" ', 'image/jpeg' ],
+        [ 'image/png; name="image003.png"',   'image/png' ],
+        [ 'image/gif; name="image003.gif"',   'image/gif' ],
+        [ 'image/webp; name="image003.webp"', 'image/webp' ],
+        )
+    {
+        Assert(
+            Kernel::GenericInterface::Operation::ZnunyAgentList::Common->InlineImageContentType( $Case->[0] ) eq $Case->[1],
+            'inline MIME parser must normalize allowed media types and ignore parameters',
+        );
+    }
+
+    for my $RejectedContentType ( 'image/svg+xml', 'text/plain', 'application/octet-stream', 'image/jpeg/extra', 'image', ['image/png'] ) {
+        Assert(
+            Kernel::GenericInterface::Operation::ZnunyAgentList::Common->InlineImageContentType($RejectedContentType) eq q{},
+            'inline MIME parser must reject unsafe or malformed content types',
+        );
+    }
+
     for my $ContentID (
         'image003.jpg@01DD2EF7.2CE4B9D0',
         '<image003.jpg@01DD2EF7.2CE4B9D0>',
@@ -116,7 +138,7 @@ my $OM = bless {
 
         Assert( $Attachment->{Found}, 'inline image must be found for accepted ContentID form' );
         Assert( $Attachment->{ContentID} eq 'image003.jpg@01DD2EF7.2CE4B9D0', 'ContentID must be normalized' );
-        Assert( $Attachment->{ContentType} eq 'image/jpeg', 'image/jpg must normalize to image/jpeg' );
+        Assert( $Attachment->{ContentType} eq 'image/jpeg', 'MIME parameters must be accepted but response must return normalized image/jpeg' );
         Assert( decode_base64( $Attachment->{Content} ) eq 'imgdata', 'content must be base64 encoded' );
         Assert( !@{$Errors}, 'successful lookup must not return errors' );
         Assert(

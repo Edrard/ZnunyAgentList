@@ -8,9 +8,23 @@ BEGIN {
     $ScriptDir =~ s{\\}{/}g;
     $ScriptDir =~ s{/[^/]*\z}{};
     unshift @INC, "$ScriptDir/..";
+
+    package Kernel::GenericInterface::Operation::Common;
+
+    sub Auth {
+        return ( 2, 'User' );
+    }
+
+    sub ReturnError {
+        my ( $Self, %Param ) = @_;
+        return { Error => \%Param };
+    }
+
+    $INC{'Kernel/GenericInterface/Operation/Common.pm'} = 1;
 }
 
 use Kernel::GenericInterface::Operation::ZnunyAgentList::Common;
+use Kernel::GenericInterface::Operation::CustomerUser::Update;
 
 sub Assert {
     my ( $Condition, $Message ) = @_;
@@ -46,38 +60,40 @@ sub Assert {
     sub CustomerUserDataGet {
         my ( $Self, %Param ) = @_;
 
-        return (
-            UserLogin      => 'existing@example.com',
-            UserCustomerID => 'example-customer',
-            UserFirstname  => 'Existing',
-            UserLastname   => 'Customer',
-            UserEmail      => 'existing@example.com',
-        ) if lc $Param{User} eq 'existing@example.com';
+        my $User = $Self->{Users}->{ lc( $Param{User} || q{} ) };
+        return if !$User;
 
-        return (
-            UserLogin      => 'updated@example.com',
-            UserCustomerID => 'second-customer',
-            UserFirstname  => 'Updated',
-            UserLastname   => 'Customer',
-            UserEmail      => 'updated@example.com',
-        ) if lc $Param{User} eq 'updated@example.com' && ( $Self->{LastAdd} || $Self->{LastUpdate} );
-
-        return;
+        return %{$User};
     }
 
     sub CustomerSearch {
         my ( $Self, %Param ) = @_;
 
-        return ( 'existing@example.com' => 'Existing Customer' )
-            if lc( $Param{PostMasterSearch} || q{} ) eq 'existing@example.com';
+        my $Email = lc( $Param{PostMasterSearch} || q{} );
+        return if $Email eq q{};
 
-        return;
+        my %Result;
+        for my $Login ( sort keys %{ $Self->{Users} || {} } ) {
+            my $User = $Self->{Users}->{$Login};
+            next if lc( $User->{UserEmail} || q{} ) ne $Email;
+            $Result{ $User->{UserLogin} } = $User->{UserFirstname} . q{ } . $User->{UserLastname};
+        }
+
+        return %Result;
+
     }
 
     sub CustomerUserAdd {
         my ( $Self, %Param ) = @_;
 
         $Self->{LastAdd} = { %Param };
+        $Self->{Users}->{ lc $Param{UserLogin} } = {
+            UserLogin      => $Param{UserLogin},
+            UserCustomerID => $Param{UserCustomerID},
+            UserFirstname  => $Param{UserFirstname},
+            UserLastname   => $Param{UserLastname},
+            UserEmail      => $Param{UserEmail},
+        };
         return 1;
     }
 
@@ -85,6 +101,14 @@ sub Assert {
         my ( $Self, %Param ) = @_;
 
         $Self->{LastUpdate} = { %Param };
+        delete $Self->{Users}->{ lc $Param{ID} };
+        $Self->{Users}->{ lc $Param{UserLogin} } = {
+            UserLogin      => $Param{UserLogin},
+            UserCustomerID => $Param{UserCustomerID},
+            UserFirstname  => $Param{UserFirstname},
+            UserLastname   => $Param{UserLastname},
+            UserEmail      => $Param{UserEmail},
+        };
         return 1;
     }
 
@@ -109,10 +133,51 @@ sub Assert {
     }
 }
 
-my $CustomerUserObject = bless {}, 'Test::CustomerUser';
+{
+    package Test::Config;
+
+    sub Get {
+        my ( $Self, $Name ) = @_;
+
+        return 1             if $Name eq 'ZnunyAgentList::EnableTicketWriteOperations';
+        return ['api_group'] if $Name eq 'ZnunyAgentList::AllowedWriteGroups';
+        return ['api_group'] if $Name eq 'ZnunyAgentList::AllowedGroups';
+
+        return;
+    }
+}
+
+{
+    package Test::Group;
+
+    sub PermissionUserGet {
+        return ( 1 => 'api_group' );
+    }
+}
+
+my $CustomerUserObject = bless {
+    Users => {
+        'existing@example.com' => {
+            UserLogin      => 'existing@example.com',
+            UserCustomerID => 'example-customer',
+            UserFirstname  => 'Existing',
+            UserLastname   => 'Customer',
+            UserEmail      => 'existing@example.com',
+        },
+        'duplicate@example.com' => {
+            UserLogin      => 'duplicate@example.com',
+            UserCustomerID => 'example-customer',
+            UserFirstname  => 'Duplicate',
+            UserLastname   => 'Customer',
+            UserEmail      => 'duplicate@example.com',
+        },
+    },
+}, 'Test::CustomerUser';
 my $OM = bless {
     'Kernel::System::CustomerCompany' => bless( {}, 'Test::CustomerCompany' ),
     'Kernel::System::CustomerUser'    => $CustomerUserObject,
+    'Kernel::Config'                  => bless( {}, 'Test::Config' ),
+    'Kernel::System::Group'           => bless( {}, 'Test::Group' ),
 }, 'Test::OM';
 
 {
@@ -221,10 +286,10 @@ my $OM = bless {
     delete $CustomerUserObject->{LastAdd};
 
     my ( $PasswordUpdate, $PasswordUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
-        CurrentLogin     => 'existing@example.com',
-        CustomerID       => 'second-customer',
-        UserID           => 2,
-        PasswordProvided => 1,
+        CustomerUserLogin => 'existing@example.com',
+        CustomerID        => 'second-customer',
+        UserID            => 2,
+        PasswordProvided  => 1,
     );
     Assert( !$PasswordUpdate, 'update must reject supplied password input' );
     Assert(
@@ -233,19 +298,74 @@ my $OM = bless {
     );
     Assert( !exists $CustomerUserObject->{LastUpdate}, 'update with supplied password must not call CustomerUserUpdate' );
 
-    my ( $Updated, $UpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
-        CurrentLogin => 'existing@example.com',
-        Login        => 'updated@example.com',
-        CustomerID   => 'second-customer',
-        UserID       => 2,
+    my $Operation = bless {}, 'Kernel::GenericInterface::Operation::CustomerUser::Update';
+
+    my $RouteOnlyResponse = $Operation->Run(
+        CustomerUserLogin => 'existing@example.com',
+        Data              => {
+            LastName => 'RuntimePatched',
+        },
     );
-    Assert( $CustomerUserObject->{LastUpdate}->{ID} eq 'existing@example.com', 'update must use CurrentLogin as ID' );
-    Assert( $CustomerUserObject->{LastUpdate}->{UserLogin} eq 'updated@example.com', 'update must support explicit login rename' );
-    Assert( $CustomerUserObject->{LastUpdate}->{UserFirstname} eq 'Existing', 'update must preserve unspecified first name' );
-    Assert( $CustomerUserObject->{LastUpdate}->{UserLastname} eq 'Customer', 'update must preserve unspecified last name' );
+    Assert( $RouteOnlyResponse->{Data}->{Updated}, 'route-only LastName PATCH must update' );
+    Assert( !@{ $RouteOnlyResponse->{Data}->{Errors} }, 'route-only LastName PATCH must not return errors' );
+    Assert( $CustomerUserObject->{LastUpdate}->{ID} eq 'existing@example.com', 'route CustomerUserLogin must be current update ID' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLogin} eq 'existing@example.com', 'omitted Login must preserve original login' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLogin} ne 'Login', 'literal field name must not become UserLogin value' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLogin} ne 'Email', 'literal Email field name must not become UserLogin value' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserFirstname} eq 'Existing', 'LastName-only PATCH must preserve first name' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLastname} eq 'RuntimePatched', 'LastName-only PATCH must use supplied last name' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserEmail} eq 'existing@example.com', 'LastName-only PATCH must preserve valid stored email' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserCustomerID} eq 'example-customer', 'LastName-only PATCH must preserve customer ID' );
     Assert( !exists $CustomerUserObject->{LastUpdate}->{UserPassword}, 'omitted password must remain unchanged' );
-    Assert( !$Updated->{UserPassword} && !$Updated->{Password}, 'update response must not return password' );
-    Assert( !@{$UpdateErrors}, 'valid update must not return errors' );
+    Assert( !$RouteOnlyResponse->{Data}->{CustomerUser}->{UserPassword} && !$RouteOnlyResponse->{Data}->{CustomerUser}->{Password}, 'update response must not return password' );
+    Assert(
+        join( q{,}, sort keys %{ $RouteOnlyResponse->{Data}->{CustomerUser} } ) eq 'UserCustomerID,UserEmail,UserFirstname,UserLastname,UserLogin',
+        'update response must expose only safe customer user fields',
+    );
+    Assert( $RouteOnlyResponse->{Data}->{CustomerUser}->{UserLastname} eq 'RuntimePatched', 'update response must return actual updated user' );
+
+    my $MismatchResponse = $Operation->Run(
+        CustomerUserLogin => 'existing@example.com',
+        Data              => {
+            CurrentLogin => 'other@example.com',
+            LastName     => 'Mismatch',
+        },
+    );
+    Assert( !$MismatchResponse->{Data}->{Updated}, 'mismatched route and body current login must not update' );
+    Assert(
+        grep { $_ eq 'CurrentLogin must match the route CustomerUserLogin.' } @{ $MismatchResponse->{Data}->{Errors} },
+        'mismatched route and body current login must return validation error',
+    );
+
+    my ( $DuplicateUpdate, $DuplicateUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
+        CustomerUserLogin => 'existing@example.com',
+        Login             => 'duplicate@example.com',
+        UserID            => 2,
+    );
+    Assert( !$DuplicateUpdate, 'duplicate target login update must fail' );
+    Assert( grep { $_ eq 'Customer user login already exists.' } @{$DuplicateUpdateErrors}, 'duplicate target login error must be present' );
+
+    my ( $NotFoundUpdate, $NotFoundUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
+        CustomerUserLogin => 'missing@example.com',
+        LastName          => 'Missing',
+        UserID            => 2,
+    );
+    Assert( !$NotFoundUpdate, 'missing customer update must fail' );
+    Assert( grep { $_ eq 'Customer user not found.' } @{$NotFoundUpdateErrors}, 'missing customer update must return structured error' );
+
+    my ( $Renamed, $RenameErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
+        CustomerUserLogin => 'existing@example.com',
+        Login             => 'renamed@example.com',
+        CustomerID        => 'second-customer',
+        UserID            => 2,
+    );
+    Assert( $CustomerUserObject->{LastUpdate}->{ID} eq 'existing@example.com', 'rename must use route login as ID' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLogin} eq 'renamed@example.com', 'update must support explicit login rename' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserFirstname} eq 'Existing', 'rename must preserve unspecified first name' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLastname} eq 'RuntimePatched', 'rename must preserve prior last name' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserEmail} eq 'existing@example.com', 'rename must preserve valid stored email' );
+    Assert( $Renamed->{UserLogin} eq 'renamed@example.com', 'rename response must return actual renamed user' );
+    Assert( !@{$RenameErrors}, 'valid rename must not return errors' );
 
     my ( $Companies, $CompanyErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerCompanyListData(
         Search => 'example',
