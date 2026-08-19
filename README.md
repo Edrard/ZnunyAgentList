@@ -1,10 +1,9 @@
 # ZnunyAgentList
 
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
-integration systems such as Laravel, Zabbix, monitoring tools, and service
-automation jobs.
+integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.5.0`.
+Current package version: `1.6.0`.
 
 The package provides a controlled REST surface for:
 
@@ -127,8 +126,8 @@ use standard Znuny `TicketQueueSet()`, `TicketCustomerSet()`, and
 
 - It does not create tickets.
 - It does not expose a custom unrestricted runtime `TicketUpdate` wrapper.
-- It does not modify queues, users, customer users, services, SLAs, states,
-  priorities, types, groups, roles, or preferences.
+- It does not modify queues, users, services, SLAs, states, priorities, types,
+  groups, roles, or preferences.
 - It does not use raw SQL.
 - It does not add database migrations.
 - It does not modify Znuny core files.
@@ -220,6 +219,8 @@ operations.
 | `GET` | `/Queue/:QueueID/AssignableAgents` | `Queue::AssignableAgents` | List active agents allowed to own tickets in a queue | `QueueID` path parameter | `Success`, `QueueID`, `QueueName`, `Agents[]`, `Errors[]` |
 | `GET` | `/CustomerUser?Search=...&Limit=...` | `CustomerUser::Search` | Search customer users | `Search`, optional `Limit` capped at `50` | `CustomerUsers[]`, optional `Warnings[]` |
 | `GET` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Get` | Get one customer user | `CustomerUserLogin` path parameter | `CustomerUser.Found`, safe customer fields |
+| `GET` | `/CustomerUserLookup` | `CustomerUser::Lookup` | Exact customer existence lookup | `Login` and/or `Email` | `Found`, `CustomerUser`, `Errors[]` |
+| `GET` | `/CustomerCompany` | `CustomerCompany::List` | List valid customer company IDs | optional `Search`, optional `Limit` capped at `100` | `CustomerCompanies[]`, `Errors[]` |
 | `GET` | `/TicketState` | `Ticket::StateList` | List ticket states | none | `TicketStates[]` |
 | `GET` | `/TicketPriority` | `Ticket::PriorityList` | List ticket priorities | none | `TicketPriorities[]` |
 | `GET` | `/TicketType` | `Ticket::TypeList` | List ticket types | none | `TicketTypes[]`, optional warnings |
@@ -231,6 +232,7 @@ operations.
 | `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search and total counting | filters such as `TicketNumber`, `Queue`, `StateType`, `CountOnly`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | Safe `Tickets[]`, page `Count`, matching `TotalCount`, pagination, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicket/:TicketID/Article/:ArticleID/InlineAttachment` | `Ticket::InlineAttachmentGet` | Fetch one inline image attachment | `TicketID` and `ArticleID` path parameters; `ContentID` query parameter | base64 image content and safe metadata |
 
 `/CustomerUser/:CustomerUserLogin` intentionally uses a customer-specific path
 parameter name. This avoids conflict with the GenericInterface authentication
@@ -264,6 +266,8 @@ checks documented above.
 | `POST` | `/TicketUnlock` | `Ticket::Unlock` | Change only the ticket lock state to `unlock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
 | `POST` | `/TicketMoveAssign/Validate` | `Ticket::MoveAssignValidate` | Validate a queue, customer, and/or owner change without changing the ticket | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, optional `CustomerUserID`, conditional `Note` | `Valid`, `RequiredNote`, `CustomerChanged`, `Current`, `Target`, `Errors[]`, `Warnings[]` |
 | `POST` | `/TicketMoveAssign` | `Ticket::MoveAssign` | Apply a prevalidated queue, customer, and/or owner change | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, optional `CustomerUserID`, conditional `Note` | `Success`, `QueueChanged`, `CustomerChanged`, `OwnerChanged`, `NoteCreated`, `Before`, `After`, `Errors[]`, `Warnings[]` |
+| `POST` | `/CustomerUser` | `CustomerUser::Create` | Create a customer user | `FirstName`, `LastName`, `Login`, `Email`, `CustomerID` | `Created`, safe `CustomerUser`, `Errors[]` |
+| `PATCH` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Update` | Update a customer user | `CurrentLogin`/path login, optional changed fields | `Updated`, safe `CustomerUser`, `Errors[]` |
 
 Example `POST /TicketArticle` body:
 
@@ -771,10 +775,10 @@ queue-only moves with `Target owner is not assignable in target queue.` when the
 current owner cannot operate in the target queue, as shown in the permission
 failure example above.
 
-A Laravel or other integration should use customer user search to select a
-customer, send `CustomerUserID` to `/TicketMoveAssign/Validate`, show `Current`,
-`Target`, `Errors`, and `Warnings` to the operator, and call
-`/TicketMoveAssign` only after `Valid=1`.
+An integration UI should use customer user search to select a customer, send
+`CustomerUserID` to `/TicketMoveAssign/Validate`, show `Current`, `Target`,
+`Errors`, and `Warnings` to the operator, and call `/TicketMoveAssign` only
+after `Valid=1`.
 
 After `QueueChanged`, `OwnerChanged`, or `CustomerChanged`, refresh safe ticket
 metadata. Customer-only changes usually leave `ArticleCount` and
@@ -925,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.5.0",
+  "Version": "1.6.0",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -938,15 +942,20 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.5.0",
+  "Version": "1.6.0",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
     "QueueList": 1,
     "QueueAssignableAgents": 1,
     "CustomerUserSearch": 1,
+    "CustomerUserLookup": 1,
+    "CustomerUserCreate": 1,
+    "CustomerUserUpdate": 1,
+    "CustomerCompanyList": 1,
     "TicketGet": 1,
     "TicketSearch": 1,
+    "TicketInlineAttachmentGet": 1,
     "TicketArticleCreate": 1,
     "TicketClose": 1,
     "TicketReopen": 1,
@@ -1121,10 +1130,10 @@ Runtime validation confirmed that `UserID=6` is returned for `QueueID=49`, is
 not returned for `QueueID=3`, and `/Agent/6/AssignableQueues` returns only
 `QueueID=49`.
 
-For a Laravel or other integration UI, use `/Agent/{UserID}/AssignableQueues`
-after owner selection and `/Queue/{QueueID}/AssignableAgents` after queue
-selection. These lookups guide the UI, but `/TicketMoveAssign/Validate` remains
-the final authority before execution.
+For an integration UI, use `/Agent/{UserID}/AssignableQueues` after owner
+selection and `/Queue/{QueueID}/AssignableAgents` after queue selection. These
+lookups guide the UI, but `/TicketMoveAssign/Validate` remains the final
+authority before execution.
 
 ### Queues
 
@@ -1221,6 +1230,49 @@ Wildcard-only or too-short customer searches return an empty result and warning:
   ]
 }
 ```
+
+`GET /CustomerUserLookup?Login=example.customer`
+
+```json
+{
+  "Found": 1,
+  "CustomerUser": {
+    "Found": 1,
+    "UserLogin": "example.customer",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "Example",
+    "UserLastname": "Customer",
+    "UserEmail": "customer@example.com"
+  },
+  "Errors": []
+}
+```
+
+`CustomerUser::Get` is the exact login lookup. `CustomerUser::Lookup` exists for
+exact existence checks by `Login` or exact email checks by `Email`; it does not
+use fuzzy customer search semantics, and wildcard-like email values are rejected.
+If an email matches multiple active customer users, the lookup returns
+`Found: 0` with an error instead of choosing one arbitrarily.
+
+`GET /CustomerCompany?Search=example&Limit=20`
+
+```json
+{
+  "CustomerCompanies": [
+    {
+      "CustomerID": "example-customer",
+      "CustomerCompanyName": "Example Customer"
+    }
+  ],
+  "Errors": []
+}
+```
+
+The UI label `Company ID` maps to Znuny `CustomerID`. Use
+`CustomerCompany::List` to populate a selector/autocomplete, then send the
+selected `CustomerID` as `CustomerID` when creating or updating a customer user.
+`Search` is optional, scalar, bounded to 100 characters, and passed to Znuny's
+standard customer company search.
 
 ### Ticket Dictionaries
 
@@ -1434,6 +1486,71 @@ Not found:
 }
 ```
 
+### Inline Article Images
+
+`Ticket::Get` intentionally remains a safe metadata lookup. It does not return
+article bodies or attachment content. Use `Ticket::InlineAttachmentGet` only
+after another trusted article source has found an HTML `cid:` reference that
+belongs to a ticket article.
+
+`GET /ZnunyAgentListTicket/:TicketID/Article/:ArticleID/InlineAttachment?ContentID=...`
+
+`ContentID` is passed as a query parameter, not as a path segment. This is
+intentional: MIME Content-IDs can contain URL-sensitive characters, including
+slashes, and Znuny's REST transport matches path parameters as single
+slash-separated segments. Clients must URL-encode the query value.
+
+Equivalent Content-ID request forms are accepted:
+
+```text
+image003.jpg@01DD2EF7.2CE4B9D0
+<image003.jpg@01DD2EF7.2CE4B9D0>
+cid:image003.jpg@01DD2EF7.2CE4B9D0
+cid:<image003.jpg@01DD2EF7.2CE4B9D0>
+```
+
+The operation strips only the optional `cid:` prefix and surrounding angle
+brackets, then requires an exact normalized Content-ID match. Nested or
+malformed angle-bracket wrappers are rejected instead of being normalized. It
+verifies that the ticket exists, the article belongs to the ticket, and exactly
+one attachment in that article has the requested Content-ID. Attachment `FileID`
+is an article-local identifier and is never treated as a global database ID.
+
+Allowed MIME types are `image/png`, `image/jpeg`, `image/gif`, and `image/webp`.
+`image/jpg` is normalized to `image/jpeg`; SVG and non-image attachments are
+rejected. `Content` is returned as base64.
+
+Success:
+
+```json
+{
+  "Found": 1,
+  "TicketID": 59078,
+  "ArticleID": 354070,
+  "FileID": 3,
+  "Filename": "image003.jpg",
+  "ContentType": "image/jpeg",
+  "ContentID": "image003.jpg@01DD2EF7.2CE4B9D0",
+  "Disposition": "inline",
+  "FilesizeRaw": 12345,
+  "Content": "base64-content",
+  "Errors": []
+}
+```
+
+Not found or unresolved:
+
+```json
+{
+  "Found": 0,
+  "TicketID": 59078,
+  "ArticleID": 354070,
+  "Errors": [
+    "Inline attachment not found."
+  ]
+}
+```
+
 ### Safe Ticket Search
 
 Endpoint:
@@ -1565,7 +1682,7 @@ GET /ZnunyAgentListTicketSearch?StateType=open&SortBy=Changed&SortDirection=DESC
 GET /ZnunyAgentListTicketSearch?StateType=open&SortBy=Created&SortDirection=ASC
 ```
 
-A Laravel active-ticket cache warmer can use this sequence:
+An active-ticket cache warmer can use this sequence:
 
 ```text
 1. GET /ZnunyAgentListTicketSearch?StateType=new,open&CountOnly=1
@@ -1841,9 +1958,63 @@ Combined filters:
 See the controlled move / owner / customer workflow above for validation,
 execution, and cache refresh guidance.
 
-A Laravel integration can show **Lock / Take in work** when `Lock` is `unlock`,
-and **Unlock / Release** when `Lock` is `lock`. After either operation, refresh
-the safe ticket metadata or update the local cache.
+A consuming UI can show **Lock / Take in work** when `Lock` is `unlock`, and
+**Unlock / Release** when `Lock` is `lock`. After either operation, refresh the
+safe ticket metadata or update the local cache.
+
+### Customer User Writes
+
+`POST /CustomerUser`
+
+```json
+{
+  "FirstName": "John",
+  "LastName": "Doe",
+  "Login": "john.doe@example.com",
+  "Email": "john.doe@example.com",
+  "CustomerID": "example-customer"
+}
+```
+
+`FirstName`, `LastName`, `Login`, `Email`, and `CustomerID` are required.
+`CustomerID` is the Znuny value shown as `Company ID` in the agent UI and must
+exist as a valid customer company. Password input is not supported for this REST
+endpoint. Znuny's REST transport can record raw non-GET request bodies in
+GenericInterface debug output, so caller-supplied passwords are rejected. Create
+generates a private random password internally and never returns it. A customer
+who needs Customer Portal access must use the normal administrative or
+password-reset workflow to receive a new password.
+
+```json
+{
+  "Created": 1,
+  "CustomerUser": {
+    "UserLogin": "john.doe@example.com",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "John",
+    "UserLastname": "Doe",
+    "UserEmail": "john.doe@example.com"
+  },
+  "Errors": []
+}
+```
+
+`PATCH /CustomerUser/:CustomerUserLogin`
+
+```json
+{
+  "FirstName": "Jane",
+  "LastName": "Doe",
+  "Email": "jane.doe@example.com",
+  "CustomerID": "example-customer"
+}
+```
+
+Unspecified fields are preserved. Password input is not supported for this REST
+endpoint, so Update does not change customer-user passwords. Login rename is
+supported through Znuny's native `CustomerUserUpdate(ID => CurrentLogin,
+UserLogin => Login, ...)` path by providing `Login`; if omitted, the login
+remains unchanged.
 
 ### Error Responses
 
@@ -1901,7 +2072,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.5.0.opm
+/path/to/output/ZnunyAgentList-1.6.0.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -1910,14 +2081,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.5.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.0.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.5.0.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.0.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

@@ -3,8 +3,12 @@
 use strict;
 use warnings;
 
-use FindBin qw($Bin);
-use lib "$Bin/..";
+BEGIN {
+    my $ScriptDir = $0;
+    $ScriptDir =~ s{\\}{/}g;
+    $ScriptDir =~ s{/[^/]*\z}{};
+    unshift @INC, "$ScriptDir/..";
+}
 
 BEGIN {
     package Kernel::GenericInterface::Operation::Common;
@@ -90,7 +94,7 @@ sub HasError {
 
         return {
             QueueID   => $QueueID,
-            QueueName => ( $QueueID == 3 ? 'Junk' : 'Vamark Projects' ),
+            QueueName => ( $QueueID == 3 ? 'Junk' : 'Example Projects' ),
             GroupID   => 1,
         };
     };

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <otrs_package version="1.1">
     <Name>ZnunyAgentList</Name>
-    <Version>1.5.0</Version>
+    <Version>1.6.0</Version>
     <Framework>6.5.x</Framework>
     <Vendor>Vamark</Vendor>
     <URL>https://github.com/vamark/ZnunyAgentList</URL>
@@ -17,8 +17,13 @@
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Queue/AssignableAgents.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Search.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Get.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Lookup.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Create.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerUser/Update.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/CustomerCompany/List.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Get.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Search.pm" />
+        <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/InlineAttachmentGet.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/ArticleCreate.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Close.pm" />
         <File Permission="644" Location="Kernel/GenericInterface/Operation/Ticket/Reopen.pm" />

@@ -3,8 +3,14 @@
 use strict;
 use warnings;
 
-use FindBin qw($Bin);
-use lib "$Bin/..";
+our $ScriptDir;
+
+BEGIN {
+    $ScriptDir = $0;
+    $ScriptDir =~ s{\\}{/}g;
+    $ScriptDir =~ s{/[^/]*\z}{};
+    unshift @INC, "$ScriptDir/..";
+}
 
 BEGIN {
     package Kernel::GenericInterface::Operation::Common;
@@ -46,14 +52,14 @@ sub Assert {
         my ( $Self, %Param ) = @_;
 
         $Self->{ValidRequested} = $Param{Valid};
-        return ( 3 => 'Junk', 49 => 'Vamark Projects' );
+        return ( 3 => 'Junk', 49 => 'Example Projects' );
     }
 
     sub QueueGet {
         my ( $Self, %Param ) = @_;
 
         return ( QueueID => 3, Name => 'Junk', GroupID => 20, ValidID => 1 ) if $Param{ID} == 3;
-        return ( QueueID => 49, Name => 'Vamark Projects', GroupID => 10, ValidID => 1 ) if $Param{ID} == 49;
+        return ( QueueID => 49, Name => 'Example Projects', GroupID => 10, ValidID => 1 ) if $Param{ID} == 49;
         return;
     }
 }
@@ -155,7 +161,7 @@ my $OM = bless {
     }
 }
 
-my $OperationFile = "$Bin/../Kernel/GenericInterface/Operation/User/AssignableQueues.pm";
+my $OperationFile = "$ScriptDir/../Kernel/GenericInterface/Operation/User/AssignableQueues.pm";
 open my $OperationHandle, '<', $OperationFile or die "FAIL: cannot read $OperationFile: $!\n";
 my $OperationSource = do { local $/; <$OperationHandle> };
 close $OperationHandle;

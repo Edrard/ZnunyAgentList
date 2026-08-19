@@ -47,7 +47,14 @@ require_file 'scripts/verify-source.sh'
 require_file 'scripts/build-package.sh'
 require_file 'scripts/test-move-assign-validation.pl'
 require_file 'scripts/test-assignable-queues.pl'
+require_file 'scripts/test-inline-attachment.pl'
+require_file 'scripts/test-customer-user-write.pl'
 require_file 'Kernel/GenericInterface/Operation/User/AssignableQueues.pm'
+require_file 'Kernel/GenericInterface/Operation/Ticket/InlineAttachmentGet.pm'
+require_file 'Kernel/GenericInterface/Operation/CustomerUser/Lookup.pm'
+require_file 'Kernel/GenericInterface/Operation/CustomerUser/Create.pm'
+require_file 'Kernel/GenericInterface/Operation/CustomerUser/Update.pm'
+require_file 'Kernel/GenericInterface/Operation/CustomerCompany/List.pm'
 require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 
 SOPM="$ROOT/ZnunyAgentList.sopm"
@@ -69,8 +76,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.5.0' ]; then
-        pass 'SOPM version is 1.5.0'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.6.0' ]; then
+        pass 'SOPM version is 1.6.0'
     else
         fail 'Unexpected SOPM version'
     fi
@@ -154,6 +161,7 @@ else
     for OperationName in \
         'GenericInterface::Operation::Module###Ticket::Get' \
         'GenericInterface::Operation::Module###Ticket::Search' \
+        'GenericInterface::Operation::Module###Ticket::InlineAttachmentGet' \
         'GenericInterface::Operation::Module###Ticket::ArticleCreate' \
         'GenericInterface::Operation::Module###Ticket::Close' \
         'GenericInterface::Operation::Module###Ticket::Reopen' \
@@ -161,6 +169,10 @@ else
         'GenericInterface::Operation::Module###Ticket::Unlock' \
         'GenericInterface::Operation::Module###Queue::AssignableAgents' \
         'GenericInterface::Operation::Module###User::AssignableQueues' \
+        'GenericInterface::Operation::Module###CustomerUser::Lookup' \
+        'GenericInterface::Operation::Module###CustomerUser::Create' \
+        'GenericInterface::Operation::Module###CustomerUser::Update' \
+        'GenericInterface::Operation::Module###CustomerCompany::List' \
         'GenericInterface::Operation::Module###Ticket::MoveAssignValidate' \
         'GenericInterface::Operation::Module###Ticket::MoveAssign' \
         'GenericInterface::Operation::Module###ZnunyAgentList::Config' \
@@ -238,8 +250,13 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         'Queue::AssignableAgents' \
         'CustomerUser::Search' \
         'CustomerUser::Get' \
+        'CustomerUser::Lookup' \
+        'CustomerUser::Create' \
+        'CustomerUser::Update' \
+        'CustomerCompany::List' \
         'Ticket::Search' \
         'Ticket::Get' \
+        'Ticket::InlineAttachmentGet' \
         'Ticket::ArticleCreate' \
         'Ticket::Close' \
         'Ticket::Reopen' \
@@ -279,9 +296,12 @@ if [ -f "$WEBSERVICE_YAML" ]; then
         '/Queue/:QueueID/AssignableAgents' \
         '/CustomerUser' \
         '/CustomerUser/:CustomerUserLogin' \
+        '/CustomerUserLookup' \
+        '/CustomerCompany' \
         '/ZnunyAgentListTicketSearch' \
         '/ZnunyAgentListTicket/:TicketID' \
         '/ZnunyAgentListTicketNumber/:TicketNumber' \
+        '/ZnunyAgentListTicket/:TicketID/Article/:ArticleID/InlineAttachment' \
         '/TicketArticle' \
         '/TicketClose' \
         '/TicketReopen' \
@@ -459,6 +479,76 @@ else
     fail 'Perl is required for the assignable queues regression harness'
 fi
 
+INLINE_ATTACHMENT_FILE="$ROOT/Kernel/GenericInterface/Operation/Ticket/InlineAttachmentGet.pm"
+if grep -Fq 'AuthenticateReadAgent' "$INLINE_ATTACHMENT_FILE" \
+    && ! grep -Fq 'AuthenticateWriteAgent' "$INLINE_ATTACHMENT_FILE" \
+    && grep -Fq 'InlineAttachmentData' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'NormalizeContentID(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq '[<>]' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'ArticleAttachmentIndex(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'ArticleAttachment(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'encode_base64' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'image/webp' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && ! grep -Fq 'image/svg' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Inline attachment lookup uses read auth, article APIs, CID normalization, base64, and image allow-list'
+else
+    fail 'Inline attachment security or API checks were not found'
+fi
+
+for CustomerWriteOperation in Create Update; do
+    CustomerWriteFile="$ROOT/Kernel/GenericInterface/Operation/CustomerUser/$CustomerWriteOperation.pm"
+    if grep -Fq 'AuthenticateWriteAgent' "$CustomerWriteFile"; then
+        pass "CustomerUser::$CustomerWriteOperation uses write authorization helper"
+    else
+        fail "CustomerUser::$CustomerWriteOperation does not use write authorization helper"
+    fi
+done
+
+if grep -Fq 'CustomerUserAdd(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerUserUpdate(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerCompanyGet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerCompanyList(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'GenerateRandomPassword( Size => 24 )' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'UserPassword => $GeneratedPassword' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'PasswordProvided' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Create.pm" \
+    && grep -Fq 'PasswordProvided' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Update.pm" \
+    && ! grep -R -n -E 'Password.*=>' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser" --include='*.pm' | grep -F 'Data' >/dev/null 2>&1; then
+    pass 'Customer user write helpers use standard Znuny APIs, company validation, generated create password, and password input rejection'
+else
+    fail 'Customer user write helper checks were not found'
+fi
+
+if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
+    && grep -Fq 'POST /CustomerUser' "$ROOT/README.md" \
+    && grep -Fq 'PATCH /CustomerUser/:CustomerUserLogin' "$ROOT/README.md" \
+    && grep -Fq 'GET /CustomerCompany' "$ROOT/README.md" \
+    && grep -Fq 'Company ID' "$ROOT/README.md" \
+    && grep -Fq 'Password input is not supported' "$ROOT/README.md" \
+    && grep -Fq 'generates a private random password' "$ROOT/README.md" \
+    && grep -Fq 'password-reset workflow' "$ROOT/README.md" \
+    && grep -Fq 'base64' "$ROOT/README.md" \
+    && grep -Fq 'image/webp' "$ROOT/README.md"; then
+    pass 'README documents customer/user company and inline attachment contracts'
+else
+    fail 'README documentation for 1.6.0 API additions is incomplete'
+fi
+
+if command -v perl >/dev/null 2>&1; then
+    if perl "$ROOT/scripts/test-inline-attachment.pl"; then
+        pass 'Inline attachment regression harness passed'
+    else
+        fail 'Inline attachment regression harness failed'
+    fi
+
+    if perl "$ROOT/scripts/test-customer-user-write.pl"; then
+        pass 'Customer user write regression harness passed'
+    else
+        fail 'Customer user write regression harness failed'
+    fi
+else
+    fail 'Perl is required for the 1.6.0 regression harnesses'
+fi
+
 if grep -E "Param\(.*'(Subject|Body|Kind|Reason|ArticleType|SenderType|HistoryType|HistoryComment|From|To|Cc|Bcc|MimeType|Charset)'" \
     "$ROOT/Kernel/GenericInterface/Operation/Ticket/Lock.pm" \
     "$ROOT/Kernel/GenericInterface/Operation/Ticket/Unlock.pm" >/dev/null 2>&1 \
@@ -576,11 +666,12 @@ else
     fail 'Controlled TicketQueueSet, TicketCustomerSet, or TicketOwnerSet implementation was not found'
 fi
 
-WRITE_STYLE_CALLS=$(grep -R -n -E '\b(TicketCreate|TicketUpdate|TicketUnlock|SetPreferences|QueueUpdate|QueueAdd|CustomerUserAdd|CustomerUserUpdate|SLAAdd|SLAUpdate|ServiceAdd|ServiceUpdate|PriorityAdd|PriorityUpdate|StateAdd|StateUpdate|TypeAdd|TypeUpdate)\s*\(|DB->Do\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' || true)
+WRITE_STYLE_CALLS=$(grep -R -n -E '\b(TicketCreate|TicketUpdate|TicketUnlock|SetPreferences|QueueUpdate|QueueAdd|CustomerUserAdd|CustomerUserUpdate|SLAAdd|SLAUpdate|ServiceAdd|ServiceUpdate|PriorityAdd|PriorityUpdate|StateAdd|StateUpdate|TypeAdd|TypeUpdate)\s*\(|DB->Do\b' "$ROOT/Kernel/GenericInterface/Operation" --include='*.pm' \
+    | grep -Ev "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm:.*CustomerUser(Add|Update)\s*\(" || true)
 if [ -n "$WRITE_STYLE_CALLS" ]; then
     fail 'Obvious write-style method call found in operation files'
 else
-    pass 'No obvious write-style method calls found in operation files'
+    pass 'No unexpected write-style method calls found in operation files'
 fi
 
 POWERSHELL_FILE=$(find "$ROOT" -path "$ROOT/.git" -prune -o -name '*.ps1' -print -quit)
@@ -590,11 +681,14 @@ else
     pass 'No PowerShell files found'
 fi
 
-OPM_FILE=$(find "$ROOT" -path "$ROOT/.git" -prune -o -name '*.opm' -print -quit)
+OPM_FILE=$(find "$ROOT" \
+    -path "$ROOT/.git" -prune -o \
+    -path "$ROOT/release-assets" -prune -o \
+    -name '*.opm' -print -quit)
 if [ -n "$OPM_FILE" ]; then
     fail 'Generated .opm files are present in the source tree'
 else
-    pass 'No generated .opm files found'
+    pass 'No generated .opm files found in source paths'
 fi
 
 printf '\nWARNING: This read-only check does not prove Perl syntax, package build, installation, operation discovery, or REST behavior.\n'

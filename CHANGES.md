@@ -1,5 +1,16 @@
 # ZnunyAgentList Changelog
 
+## 1.6.0 - Unreleased
+
+- Added `Ticket::InlineAttachmentGet` for read-only base64 retrieval of one inline image attachment by `TicketID`, `ArticleID`, and exact normalized `ContentID`.
+- Kept inline attachment `ContentID` as a request parameter instead of a path segment so URL-sensitive MIME Content-IDs remain transport-safe.
+- Added exact `CustomerUser::Lookup` by login or email for customer existence checks without fuzzy search semantics.
+- Added controlled `CustomerUser::Create` and `CustomerUser::Update` operations through standard Znuny customer APIs and write authorization.
+- Kept customer-user password fields out of the REST create/update contract because Znuny can record raw non-GET request bodies in GenericInterface debug output.
+- Made `CustomerUser::Create` generate a private random password internally while rejecting caller-supplied password fields.
+- Added read-only `CustomerCompany::List` for valid `CustomerID` / Company ID discovery.
+- Kept ordinary safe ticket reads metadata-only; inline attachment content is fetched only through the narrow attachment endpoint.
+
 ## 1.5.0 - Unreleased
 
 - Added `GET /Agent/{UserID}/AssignableQueues` as the reverse lookup for `GET /Queue/{QueueID}/AssignableAgents`.

@@ -1,0 +1,6 @@
+scripts/*.sh text eol=lf
+scripts/*.pl text eol=lf
+Kernel/**/*.pm text eol=lf
+Kernel/**/*.xml text eol=lf
+*.sopm text eol=lf
+examples/**/*.yml text eol=lf

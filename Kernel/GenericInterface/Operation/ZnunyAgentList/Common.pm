@@ -4,11 +4,12 @@ use strict;
 use warnings;
 
 use Digest::SHA qw(sha256_hex);
+use MIME::Base64 qw(encode_base64);
 
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.5.0';
+use constant PACKAGE_VERSION => '1.6.0';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -549,6 +550,391 @@ sub SafeContentType {
     return $ContentType if $ContentType =~ m{\A[-+./;=a-zA-Z0-9_ ]+\z};
 
     return 'text/plain; charset=utf8';
+}
+
+sub NormalizeContentID {
+    my ( $Class, $Value ) = @_;
+
+    my $ContentID = $Class->SafeString( $Value, 255 );
+    $ContentID =~ s{\Acid:}{}i;
+    $ContentID =~ s{^\s+}{};
+    $ContentID =~ s{\s+$}{};
+
+    if ( $ContentID =~ m{\A<[^<>]+>\z} ) {
+        $ContentID =~ s{\A<}{};
+        $ContentID =~ s{>\z}{};
+    }
+
+    return q{} if $ContentID =~ m{[<>]};
+
+    return $ContentID;
+}
+
+sub InlineImageContentType {
+    my ( $Class, $Value ) = @_;
+
+    my $ContentType = lc $Class->SafeContentType($Value);
+    $ContentType =~ s{\s*;.*\z}{};
+
+    return 'image/jpeg' if $ContentType eq 'image/jpg';
+
+    my %Allowed = map { $_ => 1 } qw(image/png image/jpeg image/gif image/webp);
+
+    return $Allowed{$ContentType} ? $ContentType : q{};
+}
+
+sub InlineAttachmentData {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID  = $Class->PositiveInt( $Param{TicketID} );
+    my $ArticleID = $Class->PositiveInt( $Param{ArticleID} );
+    my $ContentID = $Class->NormalizeContentID( $Param{ContentID} );
+
+    return ( undef, ['TicketID, ArticleID, and ContentID are required.'] )
+        if !$TicketID || !$ArticleID || $ContentID eq q{};
+
+    my $Ticket = $Class->TicketLookup(
+        TicketID => $TicketID,
+        UserID   => $Param{UserID},
+    );
+    return ( { Found => 0 }, ['Ticket not found.'] ) if !$Ticket;
+
+    my $ArticleObject = eval { $Kernel::OM->Get('Kernel::System::Ticket::Article') };
+    return ( undef, ['Article API is unavailable.'] ) if !$ArticleObject;
+
+    my @Articles = eval {
+        $ArticleObject->ArticleList(
+            TicketID  => $TicketID,
+            ArticleID => $ArticleID,
+        );
+    };
+    return ( undef, ['Article lookup failed.'] ) if $@;
+    return ( { Found => 0 }, ['Article not found for ticket.'] ) if !@Articles;
+
+    my %Index = eval {
+        $ArticleObject->ArticleAttachmentIndex(
+            TicketID  => $TicketID,
+            ArticleID => $ArticleID,
+        );
+    };
+    return ( undef, ['Attachment index lookup failed.'] ) if $@;
+
+    my @Matches;
+    for my $FileID ( sort { $a <=> $b } keys %Index ) {
+        next if !$FileID || ref $Index{$FileID} ne 'HASH';
+        next if $Class->NormalizeContentID( $Index{$FileID}->{ContentID} ) ne $ContentID;
+
+        push @Matches, $FileID;
+    }
+
+    return ( { Found => 0 }, ['Inline attachment not found.'] ) if !@Matches;
+    return ( undef, ['ContentID is not unique for this article.'] ) if @Matches > 1;
+
+    my $FileID = $Matches[0];
+    my %Attachment = eval {
+        $ArticleObject->ArticleAttachment(
+            TicketID  => $TicketID,
+            ArticleID => $ArticleID,
+            FileID    => $FileID,
+        );
+    };
+    return ( undef, ['Attachment content lookup failed.'] ) if $@ || !%Attachment;
+
+    if ( $Class->NormalizeContentID( $Attachment{ContentID} ) ne $ContentID ) {
+        return ( undef, ['Attachment ContentID changed during lookup.'] );
+    }
+
+    my $SafeContentType = $Class->InlineImageContentType( $Attachment{ContentType} );
+    return ( undef, ['Attachment is not an allowed inline image type.'] )
+        if !$SafeContentType;
+
+    return (
+        {
+            Found       => 1,
+            TicketID    => $Ticket->{TicketID},
+            ArticleID   => 0 + $ArticleID,
+            FileID      => 0 + $FileID,
+            Filename    => $Class->SafeString( $Attachment{Filename}, 255 ),
+            ContentType => $SafeContentType,
+            ContentID   => $ContentID,
+            Disposition => $Class->SafeString( $Attachment{Disposition}, 32 ),
+            FilesizeRaw => 0 + ( $Attachment{FilesizeRaw} || 0 ),
+            Content     => encode_base64( $Attachment{Content} // q{}, q{} ),
+        },
+        [],
+    );
+}
+
+sub SafeEmail {
+    my ( $Class, $Value ) = @_;
+
+    my $Email = $Class->SafeString( $Value, 255 );
+    return q{} if $Email eq q{};
+    return q{} if $Email =~ m{[*%?]};
+
+    return $Email if $Email =~ m{\A[^@\s]+@[^@\s]+\.[^@\s]+\z};
+
+    return q{};
+}
+
+sub CustomerCompanyData {
+    my ( $Class, %Company ) = @_;
+
+    return {
+        CustomerID          => $Company{CustomerID} // q{},
+        CustomerCompanyName => $Company{CustomerCompanyName} // q{},
+    };
+}
+
+sub CustomerCompanyLookup {
+    my ( $Class, $CustomerID ) = @_;
+
+    $CustomerID = $Class->SafeString( $CustomerID, 255 );
+    return if $CustomerID eq q{};
+
+    my $CustomerCompanyObject = eval { $Kernel::OM->Get('Kernel::System::CustomerCompany') };
+    return if !$CustomerCompanyObject;
+
+    my %Company = eval {
+        $CustomerCompanyObject->CustomerCompanyGet(
+            CustomerID => $CustomerID,
+        );
+    };
+    return if $@ || !$Company{CustomerID};
+    return if $Company{ValidID} && $Company{ValidID} != 1;
+
+    return $Class->CustomerCompanyData(%Company);
+}
+
+sub CustomerCompanyListData {
+    my ( $Class, %Param ) = @_;
+
+    return ( [], ['Search must be a scalar string.'] ) if ref $Param{Search};
+
+    my $Search = $Class->SafeString( $Param{Search}, 100 );
+    my $Limit  = $Class->Limit( $Param{Limit}, 50, 100 );
+
+    my $CustomerCompanyObject = eval { $Kernel::OM->Get('Kernel::System::CustomerCompany') };
+    return ( [], ['Customer company API is unavailable.'] ) if !$CustomerCompanyObject;
+
+    my %CompanyList = eval {
+        $Search eq q{}
+            ? $CustomerCompanyObject->CustomerCompanyList(
+                Valid => 1,
+                Limit => $Limit,
+            )
+            : $CustomerCompanyObject->CustomerCompanyList(
+                Search => $Search,
+                Valid  => 1,
+                Limit  => $Limit,
+            );
+    };
+    return ( [], ['Customer company lookup failed.'] ) if $@;
+
+    my @Companies;
+    for my $CustomerID ( sort { lc($a) cmp lc($b) } grep { defined && $_ ne q{} } keys %CompanyList ) {
+        my $Company = $Class->CustomerCompanyLookup($CustomerID) || {
+            CustomerID          => $CustomerID,
+            CustomerCompanyName => $CompanyList{$CustomerID} // q{},
+        };
+        push @Companies, $Company;
+    }
+
+    @Companies = sort {
+        lc( $a->{CustomerCompanyName} // q{} ) cmp lc( $b->{CustomerCompanyName} // q{} )
+            || lc( $a->{CustomerID} // q{} ) cmp lc( $b->{CustomerID} // q{} )
+    } @Companies;
+
+    return ( \@Companies, [] );
+}
+
+sub CustomerUserLookupData {
+    my ( $Class, %Param ) = @_;
+
+    my $RawLogin = defined $Param{Login} ? $Param{Login} : $Param{CustomerUserLogin};
+    my $Login    = $Class->SafeString( $RawLogin, 255 );
+    my $Email = $Class->SafeEmail( $Param{Email} );
+    my $RawEmail = $Class->SafeString( $Param{Email}, 255 );
+
+    if ( $Login eq q{} && $RawEmail ne q{} && $Email eq q{} ) {
+        return ( undef, ['Email must be valid.'] );
+    }
+
+    if ( $Login eq q{} && $Email eq q{} ) {
+        return ( undef, ['Login or Email is required.'] );
+    }
+
+    my $CustomerUserObject = eval { $Kernel::OM->Get('Kernel::System::CustomerUser') };
+    return ( undef, ['Customer user API is unavailable.'] ) if !$CustomerUserObject;
+
+    if ($Login) {
+        my %UserData = eval { $CustomerUserObject->CustomerUserDataGet( User => $Login ) };
+        return ( undef, ['Customer user lookup failed.'] ) if $@;
+        return ( $Class->CustomerUserData(%UserData), [] )
+            if $UserData{UserLogin};
+    }
+
+    if ($Email) {
+        my %SearchResult = eval {
+            $CustomerUserObject->CustomerSearch(
+                PostMasterSearch => $Email,
+                Valid            => 1,
+                Limit            => 50,
+            );
+        };
+        return ( undef, ['Customer user email lookup failed.'] ) if $@;
+
+        my @Matches;
+        for my $UserLogin ( sort keys %SearchResult ) {
+            my %UserData = eval { $CustomerUserObject->CustomerUserDataGet( User => $UserLogin ) };
+            return ( undef, ['Customer user data lookup failed.'] ) if $@;
+            next if !$UserData{UserLogin};
+            next if lc( $UserData{UserEmail} // q{} ) ne lc $Email;
+
+            push @Matches, $Class->CustomerUserData(%UserData);
+        }
+
+        return ( $Matches[0], [] ) if @Matches == 1;
+        return ( undef, ['Email matches multiple customer users.'] ) if @Matches > 1;
+    }
+
+    return ( undef, [] );
+}
+
+sub CustomerUserWriteData {
+    my ( $Class, %Param ) = @_;
+
+    my $Data = {
+        UserFirstname  => $Class->SafeString( $Param{FirstName}, 100 ),
+        UserLastname   => $Class->SafeString( $Param{LastName}, 100 ),
+        UserLogin      => $Class->SafeString( $Param{Login}, 255 ),
+        UserEmail      => $Class->SafeEmail( $Param{Email} ),
+        UserCustomerID => $Class->SafeString( $Param{CustomerID}, 255 ),
+    };
+
+    return $Data;
+}
+
+sub CustomerUserCreateData {
+    my ( $Class, %Param ) = @_;
+
+    my $Data = $Class->CustomerUserWriteData(%Param);
+    my @Errors;
+
+    push @Errors, 'Password input is not supported. Use the normal password reset workflow.'
+        if $Param{PasswordProvided} || exists $Param{Password} || exists $Param{UserPassword};
+    push @Errors, 'FirstName is required.'  if $Data->{UserFirstname} eq q{};
+    push @Errors, 'LastName is required.'   if $Data->{UserLastname} eq q{};
+    push @Errors, 'Login is required.'      if $Data->{UserLogin} eq q{};
+    push @Errors, 'Email is required and must be valid.' if $Data->{UserEmail} eq q{};
+    push @Errors, 'CustomerID is required.' if $Data->{UserCustomerID} eq q{};
+
+    return ( undef, \@Errors ) if @Errors;
+
+    my $CustomerCompany = $Class->CustomerCompanyLookup( $Data->{UserCustomerID} );
+    push @Errors, 'CustomerID was not found or is not valid.' if !$CustomerCompany;
+
+    my ( $Existing, $LookupErrors ) = $Class->CustomerUserLookupData( Login => $Data->{UserLogin} );
+    push @Errors, @{$LookupErrors || []};
+    push @Errors, 'Customer user login already exists.' if $Existing;
+
+    return ( undef, \@Errors ) if @Errors;
+
+    my $CustomerUserObject = eval { $Kernel::OM->Get('Kernel::System::CustomerUser') };
+    return ( undef, ['Customer user API is unavailable.'] ) if !$CustomerUserObject;
+
+    my $Success;
+    {
+        # Keep the generated customer password private and scoped only to the native create call.
+        my $GeneratedPassword = eval { $CustomerUserObject->GenerateRandomPassword( Size => 24 ) };
+        return ( undef, ['Customer user password could not be generated.'] )
+            if $@ || !defined $GeneratedPassword || ref $GeneratedPassword || length $GeneratedPassword < 24;
+
+        $Success = eval {
+            $CustomerUserObject->CustomerUserAdd(
+                %{$Data},
+                UserPassword => $GeneratedPassword,
+                ValidID      => 1,
+                UserID       => $Param{UserID},
+            );
+        };
+    }
+    return ( undef, ['Customer user could not be created.'] ) if $@ || !$Success;
+
+    my ( $Created, $CreatedErrors ) = $Class->CustomerUserLookupData( Login => $Data->{UserLogin} );
+    return ( undef, $CreatedErrors ) if @{$CreatedErrors || []};
+
+    return ( $Created, [] );
+}
+
+sub CustomerUserUpdateData {
+    my ( $Class, %Param ) = @_;
+
+    return ( undef, ['Password input is not supported. Use the normal password reset workflow.'] )
+        if $Param{PasswordProvided} || exists $Param{Password} || exists $Param{UserPassword};
+
+    my $CurrentLogin = $Class->SafeString( $Param{CurrentLogin} || $Param{CustomerUserLogin} || $Param{Login}, 255 );
+    return ( undef, ['CurrentLogin is required.'] ) if $CurrentLogin eq q{};
+
+    my ( $Existing, $LookupErrors ) = $Class->CustomerUserLookupData( Login => $CurrentLogin );
+    return ( undef, $LookupErrors ) if @{$LookupErrors || []};
+    return ( undef, ['Customer user not found.'] ) if !$Existing;
+
+    my $NewLogin = exists $Param{Login}
+        ? $Class->SafeString( $Param{Login}, 255 )
+        : $Existing->{UserLogin};
+    my $FirstName = exists $Param{FirstName}
+        ? $Class->SafeString( $Param{FirstName}, 100 )
+        : $Existing->{UserFirstname};
+    my $LastName = exists $Param{LastName}
+        ? $Class->SafeString( $Param{LastName}, 100 )
+        : $Existing->{UserLastname};
+    my $Email = exists $Param{Email}
+        ? $Class->SafeEmail( $Param{Email} )
+        : $Existing->{UserEmail};
+    my $CustomerID = exists $Param{CustomerID}
+        ? $Class->SafeString( $Param{CustomerID}, 255 )
+        : $Existing->{UserCustomerID};
+
+    my @Errors;
+    push @Errors, 'Login must not be empty.' if $NewLogin eq q{};
+    push @Errors, 'FirstName must not be empty.' if $FirstName eq q{};
+    push @Errors, 'LastName must not be empty.' if $LastName eq q{};
+    push @Errors, 'Email must be valid.' if $Email eq q{};
+    push @Errors, 'CustomerID must not be empty.' if $CustomerID eq q{};
+
+    my $CustomerCompany = $Class->CustomerCompanyLookup($CustomerID);
+    push @Errors, 'CustomerID was not found or is not valid.' if !$CustomerCompany;
+
+    if ( lc $NewLogin ne lc $CurrentLogin ) {
+        my ( $Duplicate, $DuplicateErrors ) = $Class->CustomerUserLookupData( Login => $NewLogin );
+        push @Errors, @{$DuplicateErrors || []};
+        push @Errors, 'Customer user login already exists.' if $Duplicate;
+    }
+
+    return ( undef, \@Errors ) if @Errors;
+
+    my %Update = (
+        ID             => $CurrentLogin,
+        UserLogin      => $NewLogin,
+        UserFirstname  => $FirstName,
+        UserLastname   => $LastName,
+        UserEmail      => $Email,
+        UserCustomerID => $CustomerID,
+        ValidID        => 1,
+        UserID         => $Param{UserID},
+    );
+
+    my $CustomerUserObject = eval { $Kernel::OM->Get('Kernel::System::CustomerUser') };
+    return ( undef, ['Customer user API is unavailable.'] ) if !$CustomerUserObject;
+
+    my $Success = eval { $CustomerUserObject->CustomerUserUpdate(%Update) };
+    return ( undef, ['Customer user could not be updated.'] ) if $@ || !$Success;
+
+    my ( $Updated, $UpdatedErrors ) = $Class->CustomerUserLookupData( Login => $NewLogin );
+    return ( undef, $UpdatedErrors ) if @{$UpdatedErrors || []};
+
+    return ( $Updated, [] );
 }
 
 sub TicketArticleCreate {
