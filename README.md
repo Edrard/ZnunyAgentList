@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.1`.
+Current package version: `1.6.2`.
 
 The package provides a controlled REST surface for:
 
@@ -231,7 +231,7 @@ operations.
 | `POST` | `/ValidateTicketCreate` | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data without creating a ticket | `OwnerID`, `Queue`, `CustomerUser`, `State`, `Lock` as available | `Valid`, `Errors[]`, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search and total counting | filters such as `TicketNumber`, `Queue`, `StateType`, `CountOnly`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | Safe `Tickets[]`, page `Count`, matching `TotalCount`, pagination, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search and total counting | filters such as `TicketNumber`, `Queue`, `StateType`, `CountOnly`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | Safe `Tickets[]` with `InlineAttachmentCount`, page `Count`, matching `TotalCount`, pagination, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicket/:TicketID/Article/:ArticleID/InlineAttachment` | `Ticket::InlineAttachmentGet` | Fetch one inline image attachment | `TicketID` and `ArticleID` path parameters; `ContentID` query parameter | base64 image content and safe metadata |
 
 `/CustomerUser/:CustomerUserLogin` intentionally uses a customer-specific path
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.1",
+  "Version": "1.6.2",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.1",
+  "Version": "1.6.2",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -1638,7 +1638,8 @@ Count active tickets without fetching ticket objects:
 ```
 
 `CountOnly=1` uses the same filters as normal search. It does not fetch ticket
-details or calculate article synchronization metadata.
+details, calculate article synchronization metadata, or count inline
+attachments.
 
 `GET /ZnunyAgentListTicketSearch?CountOnly=1` still returns an empty safe result
 with `TotalCount: 0`, `Limit: 0`, and the required-filter warning.
@@ -1723,8 +1724,16 @@ An active-ticket cache warmer can use this sequence:
 
 The response uses an explicit safe allow-list. It does not return article,
 note, or reply bodies; article subjects; attachments; or full article metadata.
+`InlineAttachmentCount` is calculated from attachment index metadata only. It
+counts attachments whose disposition is `inline` and whose normalized MIME type
+is `image/png`, `image/jpeg`, `image/gif`, or `image/webp`. MIME parameters are
+accepted, `image/jpg` is treated as JPEG, and SVG or non-image attachments are
+not counted. The response does not include filenames, attachment metadata,
+base64 content, or an attachment list.
 
 - `ArticleCount`: safe count of articles.
+- `InlineAttachmentCount`: non-negative integer count of matching inline raster
+  image attachments across all ticket articles.
 - `LastArticleID`: newest article ID.
 - `LastArticleCreated`: creation timestamp of the newest article.
 - `SyncFingerprint`: stable hash for external synchronization comparisons.
@@ -1766,6 +1775,7 @@ Example safe response:
       "Created": "2026-06-23 16:44:53",
       "Changed": "2026-06-23 16:44:55",
       "ArticleCount": "2",
+      "InlineAttachmentCount": 1,
       "LastArticleID": "340615",
       "LastArticleCreated": "2026-06-23 16:44:54",
       "SyncFingerprint": "sha256-hex-string"
@@ -1813,6 +1823,7 @@ Combined filters:
       "Created": "2026-01-01 10:00:00",
       "Changed": "2026-01-01 10:30:00",
       "ArticleCount": "2",
+      "InlineAttachmentCount": 0,
       "LastArticleID": "67890",
       "LastArticleCreated": "2026-01-01 10:30:00",
       "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
@@ -2110,7 +2121,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.1.opm
+/path/to/output/ZnunyAgentList-1.6.2.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -2119,14 +2130,14 @@ Install:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.1.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.2.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.1.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.2.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

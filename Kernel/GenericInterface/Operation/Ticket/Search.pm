@@ -270,6 +270,28 @@ sub Run {
             UserID       => $UserID,
         );
         my @Tickets = $Ticket ? ($Ticket) : ();
+        for my $TicketData (@Tickets) {
+            my $InlineAttachmentCount = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketInlineAttachmentCount(
+                TicketID => $TicketData->{TicketID},
+            );
+            if ( !defined $InlineAttachmentCount ) {
+                return {
+                    Success => 1,
+                    Data    => {
+                        Tickets       => [],
+                        Count         => 0,
+                        TotalCount    => 0 + scalar @Tickets,
+                        Limit         => $Limit,
+                        Offset        => 0,
+                        SortBy        => $SortBy,
+                        SortDirection => $SortDirection,
+                        Warnings      => [ @Warnings, 'Inline attachment count failed.' ],
+                    },
+                };
+            }
+
+            $TicketData->{InlineAttachmentCount} = 0 + $InlineAttachmentCount;
+        }
 
         return {
             Success => 1,
@@ -387,7 +409,29 @@ sub Run {
             TicketID => $TicketID,
             UserID   => $UserID,
         );
-        push @Tickets, $Ticket if $Ticket;
+        if ($Ticket) {
+            my $InlineAttachmentCount = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketInlineAttachmentCount(
+                TicketID => $Ticket->{TicketID},
+            );
+            if ( !defined $InlineAttachmentCount ) {
+                return {
+                    Success => 1,
+                    Data    => {
+                        Tickets       => [],
+                        Count         => 0,
+                        TotalCount    => $TotalCount,
+                        Limit         => $Limit,
+                        Offset        => $Offset,
+                        SortBy        => $SortBy,
+                        SortDirection => $SortDirection,
+                        Warnings      => ['Inline attachment count failed.'],
+                    },
+                };
+            }
+
+            $Ticket->{InlineAttachmentCount} = 0 + $InlineAttachmentCount;
+            push @Tickets, $Ticket;
+        }
     }
 
     return {

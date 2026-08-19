@@ -1,6 +1,10 @@
 # ZnunyAgentList Changelog
 
-## 1.6.1 - Unreleased
+## 1.6.2 - Unreleased
+
+- Added `InlineAttachmentCount` to safe `Ticket::Search` ticket objects, counting inline PNG, JPEG, GIF, and WebP attachments across all ticket articles without returning attachment metadata or content.
+
+## 1.6.1 - 2026-08-19
 
 - Fixed `CustomerUser::Update` so the route `CustomerUserLogin` is the authoritative current login when PATCH JSON body data is present.
 - Fixed partial customer-user updates to preserve omitted fields and avoid treating field names as values.

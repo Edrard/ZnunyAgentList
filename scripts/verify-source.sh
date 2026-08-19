@@ -48,6 +48,7 @@ require_file 'scripts/build-package.sh'
 require_file 'scripts/test-move-assign-validation.pl'
 require_file 'scripts/test-assignable-queues.pl'
 require_file 'scripts/test-inline-attachment.pl'
+require_file 'scripts/test-inline-attachment-count.pl'
 require_file 'scripts/test-customer-user-write.pl'
 require_file 'Kernel/GenericInterface/Operation/User/AssignableQueues.pm'
 require_file 'Kernel/GenericInterface/Operation/Ticket/InlineAttachmentGet.pm'
@@ -60,6 +61,7 @@ require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 SOPM="$ROOT/ZnunyAgentList.sopm"
 CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 WEBSERVICE_YAML="$ROOT/examples/webservices/AdvancedZnunyAgentListREST.yml"
+EXPECTED_VERSION='1.6.2'
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'
@@ -76,8 +78,8 @@ else
         fail 'Unexpected SOPM package name'
     fi
 
-    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = '1.6.1' ]; then
-        pass 'SOPM version is 1.6.1'
+    if [ "$(xpath_text '/otrs_package/Version' "$SOPM")" = "$EXPECTED_VERSION" ]; then
+        pass "SOPM version is $EXPECTED_VERSION"
     else
         fail 'Unexpected SOPM version'
     fi
@@ -226,6 +228,15 @@ else
             fail "SOPM contains unexpected runtime location: $SopmLocation"
         fi
     done
+fi
+
+if grep -Fq "PACKAGE_VERSION => '$EXPECTED_VERSION'" "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq "PACKAGE_VERSION=$EXPECTED_VERSION" "$ROOT/scripts/build-package.sh" \
+    && grep -Fq "ZnunyAgentList $EXPECTED_VERSION" "$WEBSERVICE_YAML" \
+    && grep -Fq "Current package version: \`$EXPECTED_VERSION\`." "$ROOT/README.md"; then
+    pass "Active version metadata is $EXPECTED_VERSION"
+else
+    fail "Active version metadata must be $EXPECTED_VERSION"
 fi
 
 if [ -f "$WEBSERVICE_YAML" ]; then
@@ -495,6 +506,17 @@ else
     fail 'Inline attachment security or API checks were not found'
 fi
 
+TICKET_SEARCH_FILE="$ROOT/Kernel/GenericInterface/Operation/Ticket/Search.pm"
+if grep -Fq 'TicketInlineAttachmentCount(' "$TICKET_SEARCH_FILE" \
+    && grep -Fq 'TicketInlineAttachmentCount' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'ArticleAttachmentIndex(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && ! grep -Fq 'ArticleAttachment(' "$TICKET_SEARCH_FILE" \
+    && grep -Fq 'InlineAttachmentCount' "$ROOT/README.md"; then
+    pass 'Ticket::Search documents and returns inline attachment counts without attachment content lookup'
+else
+    fail 'Ticket::Search inline attachment count implementation or documentation is incomplete'
+fi
+
 for CustomerWriteOperation in Create Update; do
     CustomerWriteFile="$ROOT/Kernel/GenericInterface/Operation/CustomerUser/$CustomerWriteOperation.pm"
     if grep -Fq 'AuthenticateWriteAgent' "$CustomerWriteFile"; then
@@ -530,7 +552,7 @@ if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'image/webp' "$ROOT/README.md"; then
     pass 'README documents customer/user company and inline attachment contracts'
 else
-    fail 'README documentation for 1.6.1 API additions is incomplete'
+    fail 'README documentation for customer/user company and inline attachment contracts is incomplete'
 fi
 
 if command -v perl >/dev/null 2>&1; then
@@ -540,13 +562,19 @@ if command -v perl >/dev/null 2>&1; then
         fail 'Inline attachment regression harness failed'
     fi
 
+    if perl "$ROOT/scripts/test-inline-attachment-count.pl"; then
+        pass 'Inline attachment count regression harness passed'
+    else
+        fail 'Inline attachment count regression harness failed'
+    fi
+
     if perl "$ROOT/scripts/test-customer-user-write.pl"; then
         pass 'Customer user write regression harness passed'
     else
         fail 'Customer user write regression harness failed'
     fi
 else
-    fail 'Perl is required for the 1.6.1 regression harnesses'
+    fail 'Perl is required for the inline attachment and customer user regression harnesses'
 fi
 
 if grep -E "Param\(.*'(Subject|Body|Kind|Reason|ArticleType|SenderType|HistoryType|HistoryComment|From|To|Cc|Bcc|MimeType|Charset)'" \

@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.1';
+use constant PACKAGE_VERSION => '1.6.2';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -516,6 +516,53 @@ sub TicketArticleSyncData {
     $SyncData->{LastArticleCreated} = $LastArticle->{Created};
 
     return $SyncData;
+}
+
+sub TicketInlineAttachmentCount {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+    return 0 if !$TicketID;
+
+    my $ArticleObject = eval { $Kernel::OM->Get('Kernel::System::Ticket::Article') };
+    return if !$ArticleObject;
+
+    my @Articles = eval {
+        $ArticleObject->ArticleList(
+            TicketID => $TicketID,
+        );
+    };
+    return if $@;
+    return 0 if !@Articles;
+
+    my $Count = 0;
+    for my $Article (@Articles) {
+        next if ref $Article ne 'HASH';
+
+        my $ArticleID = $Class->PositiveInt( $Article->{ArticleID} );
+        next if !$ArticleID;
+
+        my %Index = eval {
+            $ArticleObject->ArticleAttachmentIndex(
+                TicketID  => $TicketID,
+                ArticleID => $ArticleID,
+            );
+        };
+        return if $@;
+
+        ATTACHMENT:
+        for my $FileID ( sort { $a <=> $b } keys %Index ) {
+            next ATTACHMENT if !$FileID || ref $Index{$FileID} ne 'HASH';
+
+            my $Disposition = lc $Class->SafeString( $Index{$FileID}->{Disposition}, 32 );
+            next ATTACHMENT if $Disposition ne 'inline';
+            next ATTACHMENT if !$Class->InlineImageContentType( $Index{$FileID}->{ContentType} );
+
+            $Count++;
+        }
+    }
+
+    return 0 + $Count;
 }
 
 sub StateTypeData {
