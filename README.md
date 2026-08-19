@@ -220,7 +220,7 @@ operations.
 | `GET` | `/CustomerUser?Search=...&Limit=...` | `CustomerUser::Search` | Search customer users | `Search`, optional `Limit` capped at `50` | `CustomerUsers[]`, optional `Warnings[]` |
 | `GET` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Get` | Get one customer user | `CustomerUserLogin` path parameter | `CustomerUser.Found`, safe customer fields |
 | `GET` | `/CustomerUserLookup` | `CustomerUser::Lookup` | Exact customer existence lookup | `Login` and/or `Email` | `Found`, `CustomerUser`, `Errors[]` |
-| `GET` | `/CustomerCompany` | `CustomerCompany::List` | List valid customer company IDs | optional `Search`, optional `Limit` capped at `100` | `CustomerCompanies[]`, `Errors[]` |
+| `GET` | `/CustomerCompany` | `CustomerCompany::List` | List valid customer company IDs | optional `Search`, optional `Limit`; default `50`, max `100` | `CustomerCompanies[]`, `Errors[]` |
 | `GET` | `/TicketState` | `Ticket::StateList` | List ticket states | none | `TicketStates[]` |
 | `GET` | `/TicketPriority` | `Ticket::PriorityList` | List ticket priorities | none | `TicketPriorities[]` |
 | `GET` | `/TicketType` | `Ticket::TypeList` | List ticket types | none | `TicketTypes[]`, optional warnings |
@@ -1089,7 +1089,7 @@ This is a successful lookup with an empty assignment set:
 
 #### Inactive Or Locked Agent
 
-Runtime validation confirmed rejection of locked/inactive `UserID=5`:
+Locked or inactive agents are rejected with the same safe response shape:
 
 ```json
 {
@@ -1106,7 +1106,7 @@ Runtime validation confirmed rejection of locked/inactive `UserID=5`:
 
 #### Missing Agent
 
-Runtime validation confirmed the same safe error contract for a missing agent:
+Missing agents use the same safe error contract:
 
 ```json
 {
@@ -1126,9 +1126,9 @@ Runtime validation confirmed the same safe error contract for a missing agent:
 - `GET /Agent/6/AssignableQueues` answers: Which queues can this owner work in?
 - `GET /Queue/49/AssignableAgents` answers: Which owners can work in this queue?
 
-Runtime validation confirmed that `UserID=6` is returned for `QueueID=49`, is
-not returned for `QueueID=3`, and `/Agent/6/AssignableQueues` returns only
-`QueueID=49`.
+For example, if an owner is assignable in `QueueID=49` but not in `QueueID=3`,
+the queue lookup for `QueueID=49` can include that owner while
+`/Agent/6/AssignableQueues` returns only `QueueID=49`.
 
 For an integration UI, use `/Agent/{UserID}/AssignableQueues` after owner
 selection and `/Queue/{QueueID}/AssignableAgents` after queue selection. These
@@ -1251,8 +1251,33 @@ Wildcard-only or too-short customer searches return an empty result and warning:
 `CustomerUser::Get` is the exact login lookup. `CustomerUser::Lookup` exists for
 exact existence checks by `Login` or exact email checks by `Email`; it does not
 use fuzzy customer search semantics, and wildcard-like email values are rejected.
+Email is not treated as unique unless the exact lookup finds exactly one active
+customer user.
+
+Missing login:
+
+```json
+{
+  "Found": 0,
+  "CustomerUser": null,
+  "Errors": []
+}
+```
+
+Duplicate exact email:
+
+```json
+{
+  "Found": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "Email matches multiple customer users."
+  ]
+}
+```
+
 If an email matches multiple active customer users, the lookup returns
-`Found: 0` with an error instead of choosing one arbitrarily.
+`Found: 0` with that error instead of choosing one arbitrarily.
 
 `GET /CustomerCompany?Search=example&Limit=20`
 
@@ -1272,7 +1297,8 @@ The UI label `Company ID` maps to Znuny `CustomerID`. Use
 `CustomerCompany::List` to populate a selector/autocomplete, then send the
 selected `CustomerID` as `CustomerID` when creating or updating a customer user.
 `Search` is optional, scalar, bounded to 100 characters, and passed to Znuny's
-standard customer company search.
+standard customer company search. `Limit` defaults to `50`, is capped at `100`,
+and results are sorted deterministically by company name and then customer ID.
 
 ### Ticket Dictionaries
 
@@ -1521,15 +1547,15 @@ MIME parameters from Znuny, such as `image/jpeg; name="image003.jpg"`, are
 accepted for matching but are never returned. The response `ContentType` is
 always the normalized allow-listed media type only. `image/jpg` is normalized to
 `image/jpeg`; SVG and non-image attachments are rejected. `Content` is returned
-as base64.
+as base64 without line wrapping.
 
 Success:
 
 ```json
 {
   "Found": 1,
-  "TicketID": 59078,
-  "ArticleID": 354070,
+  "TicketID": 12345,
+  "ArticleID": 67890,
   "FileID": 3,
   "Filename": "image003.jpg",
   "ContentType": "image/jpeg",
@@ -1546,8 +1572,8 @@ Not found or unresolved:
 ```json
 {
   "Found": 0,
-  "TicketID": 59078,
-  "ArticleID": 354070,
+  "TicketID": 12345,
+  "ArticleID": 67890,
   "Errors": [
     "Inline attachment not found."
   ]
@@ -2057,9 +2083,9 @@ Write authorization failure:
 Use the real Znuny server for package verification, build, install, upgrade, and
 runtime validation.
 
-Users can either download the verified `.opm` package from the GitHub Release or
-build it themselves in their own Znuny/Linux environment. Do not commit generated
-`.opm` files or checksum files to Git.
+After a version is published, users can either download the verified `.opm`
+package from the GitHub Release or build it themselves in their own Znuny/Linux
+environment. Do not commit generated `.opm` files or checksum files to Git.
 
 1. Clone or update the repository on the Znuny server:
 
