@@ -1724,12 +1724,16 @@ An active-ticket cache warmer can use this sequence:
 
 The response uses an explicit safe allow-list. It does not return article,
 note, or reply bodies; article subjects; attachments; or full article metadata.
-`InlineAttachmentCount` is calculated from attachment index metadata only. It
-counts attachments whose disposition is `inline` and whose normalized MIME type
-is `image/png`, `image/jpeg`, `image/gif`, or `image/webp`. MIME parameters are
-accepted, `image/jpg` is treated as JPEG, and SVG or non-image attachments are
-not counted. The response does not include filenames, attachment metadata,
-base64 content, or an attachment list.
+`InlineAttachmentCount` is present on every returned ticket object as a
+non-negative JSON integer. It is calculated from attachment index metadata only
+and counts matching attachments across all articles of the ticket. A matching
+attachment must have disposition `inline`, case-insensitively, and a normalized
+MIME type of `image/png`, `image/jpeg`, `image/gif`, or `image/webp`. MIME
+parameters such as `image/jpeg; name="image.jpg"` are accepted, and `image/jpg`
+is normalized as JPEG. Ordinary attachments, missing or non-inline
+dispositions, PDF, DOCX, SVG, unknown, malformed, and other non-allowed MIME
+types are not counted. The response does not include attachment content, base64
+data, filenames, attachment metadata, or an attachment list through this field.
 
 - `ArticleCount`: safe count of articles.
 - `InlineAttachmentCount`: non-negative integer count of matching inline raster
@@ -1740,6 +1744,12 @@ base64 content, or an attachment list.
 
 `SyncFingerprint` changes when safe ticket metadata changes or when a new
 article, note, or reply is added.
+
+Compatibility smoke testing against Znuny 6.5.20 confirmed that the health
+endpoint reports version `1.6.2`, exact ticket-number search can return a ticket
+with `InlineAttachmentCount: 1` for a known inline JPEG, and queue-filtered
+search results include the field on every returned ticket with valid
+non-negative integer values.
 
 Example safe response:
 
@@ -2094,9 +2104,10 @@ Write authorization failure:
 Use the real Znuny server for package verification, build, install, upgrade, and
 runtime validation.
 
-After a version is published, users can either download the verified `.opm`
-package from the GitHub Release or build it themselves in their own Znuny/Linux
-environment. Do not commit generated `.opm` files or checksum files to Git.
+After a version is published, users can download the verified `.opm` package
+from that version's GitHub Release, or build it themselves in their own
+Znuny/Linux environment. Do not commit generated `.opm` files or checksum files
+to Git.
 
 1. Clone or update the repository on the Znuny server:
 

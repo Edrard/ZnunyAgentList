@@ -1,6 +1,6 @@
 # ZnunyAgentList Changelog
 
-## 1.6.2 - Unreleased
+## 1.6.2 - 2026-08-20
 
 - Added `InlineAttachmentCount` to safe `Ticket::Search` ticket objects, counting inline PNG, JPEG, GIF, and WebP attachments across all ticket articles without returning attachment metadata or content.
 
