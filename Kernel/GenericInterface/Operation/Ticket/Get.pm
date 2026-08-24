@@ -25,6 +25,7 @@ sub Run {
 
     my $RawTicketID     = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketID' );
     my $RawTicketNumber = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'TicketNumber' );
+    my $RawAllArticles  = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'AllArticles' );
 
     my $TicketID = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->PositiveInt(
         $RawTicketID,
@@ -33,6 +34,7 @@ sub Run {
         $RawTicketNumber,
         64,
     );
+    my $AllArticles = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Boolean($RawAllArticles);
 
     if ( $TicketID && $TicketNumber ) {
         push @Warnings, 'TicketNumber was ignored because TicketID was provided.';
@@ -68,13 +70,30 @@ sub Run {
         };
     }
 
+    my $Data = {
+        Found    => 1,
+        Ticket   => $Ticket,
+        Warnings => \@Warnings,
+    };
+
+    if ($AllArticles) {
+        my ( $Articles, $ArticleWarnings ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketArticlesData(
+            TicketID => $Ticket->{TicketID},
+            UserID   => $UserID,
+        );
+
+        if ($Articles) {
+            $Data->{Articles} = $Articles;
+        }
+        else {
+            $Data->{Articles} = [];
+            push @Warnings, @{$ArticleWarnings || []};
+        }
+    }
+
     return {
         Success => 1,
-        Data    => {
-            Found    => 1,
-            Ticket   => $Ticket,
-            Warnings => \@Warnings,
-        },
+        Data    => $Data,
     };
 }
 

@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.2';
+use constant PACKAGE_VERSION => '1.6.3';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 
@@ -521,8 +521,20 @@ sub TicketArticleSyncData {
 sub TicketInlineAttachmentCount {
     my ( $Class, %Param ) = @_;
 
+    my $Counts = $Class->TicketAttachmentMetadataCounts(%Param);
+    return if !defined $Counts;
+
+    return 0 + $Counts->{InlineAttachmentCount};
+}
+
+sub TicketAttachmentMetadataCounts {
+    my ( $Class, %Param ) = @_;
+
     my $TicketID = $Class->PositiveInt( $Param{TicketID} );
-    return 0 if !$TicketID;
+    return {
+        InlineAttachmentCount => 0,
+        HTMLBodyArticleCount  => 0,
+    } if !$TicketID;
 
     my $ArticleObject = eval { $Kernel::OM->Get('Kernel::System::Ticket::Article') };
     return if !$ArticleObject;
@@ -533,9 +545,13 @@ sub TicketInlineAttachmentCount {
         );
     };
     return if $@;
-    return 0 if !@Articles;
+    return {
+        InlineAttachmentCount => 0,
+        HTMLBodyArticleCount  => 0,
+    } if !@Articles;
 
-    my $Count = 0;
+    my $InlineAttachmentCount = 0;
+    my $HTMLBodyArticleCount  = 0;
     for my $Article (@Articles) {
         next if ref $Article ne 'HASH';
 
@@ -558,11 +574,28 @@ sub TicketInlineAttachmentCount {
             next ATTACHMENT if $Disposition ne 'inline';
             next ATTACHMENT if !$Class->InlineImageContentType( $Index{$FileID}->{ContentType} );
 
-            $Count++;
+            $InlineAttachmentCount++;
         }
+
+        my %HTMLIndex = eval {
+            $ArticleObject->ArticleAttachmentIndex(
+                TicketID      => $TicketID,
+                ArticleID     => $ArticleID,
+                OnlyHTMLBody  => 1,
+            );
+        };
+        return if $@;
+
+        my @HTMLFileIDs = $Class->HTMLBodyFileIDs(%HTMLIndex);
+        return if @HTMLFileIDs > 1;
+
+        $HTMLBodyArticleCount++ if @HTMLFileIDs;
     }
 
-    return 0 + $Count;
+    return {
+        InlineAttachmentCount => 0 + $InlineAttachmentCount,
+        HTMLBodyArticleCount  => 0 + $HTMLBodyArticleCount,
+    };
 }
 
 sub StateTypeData {
@@ -665,6 +698,135 @@ sub InlineImageContentType {
     my %Allowed = map { $_ => 1 } qw(image/png image/jpeg image/gif image/webp);
 
     return $Allowed{$ContentType} ? $ContentType : q{};
+}
+
+sub HTMLBodyContentType {
+    my ( $Class, $Value ) = @_;
+
+    return q{} if !defined $Value || ref $Value;
+
+    my $ContentType = $Value;
+    $ContentType =~ s/[\x00-\x1f\x7f]//g;
+    $ContentType =~ s{\A\s+}{};
+    $ContentType =~ s{\s+\z}{};
+    $ContentType =~ s{\s*;.*\z}{};
+    $ContentType =~ s{\A\s+}{};
+    $ContentType =~ s{\s+\z}{};
+    $ContentType = lc $ContentType;
+
+    return $ContentType eq 'text/html' ? 'text/html' : q{};
+}
+
+sub HTMLBodyFileIDs {
+    my ( $Class, %Index ) = @_;
+
+    my @HTMLFileIDs;
+    ATTACHMENT:
+    for my $FileID ( sort { $a <=> $b } keys %Index ) {
+        next ATTACHMENT if !$FileID || ref $Index{$FileID} ne 'HASH';
+        next ATTACHMENT if !$Class->HTMLBodyContentType( $Index{$FileID}->{ContentType} );
+
+        push @HTMLFileIDs, $FileID;
+    }
+
+    return @HTMLFileIDs;
+}
+
+sub TicketArticlesData {
+    my ( $Class, %Param ) = @_;
+
+    my $TicketID = $Class->PositiveInt( $Param{TicketID} );
+    return ( [], [] ) if !$TicketID;
+
+    my $ArticleObject = eval { $Kernel::OM->Get('Kernel::System::Ticket::Article') };
+    return ( undef, ['Article API is unavailable.'] ) if !$ArticleObject;
+
+    my @MetaArticles = eval {
+        $ArticleObject->ArticleList(
+            TicketID => $TicketID,
+        );
+    };
+    return ( undef, ['Article lookup failed.'] ) if $@;
+    return ( [], [] ) if !@MetaArticles;
+
+    my @Articles;
+    METAARTICLE:
+    for my $MetaArticle (@MetaArticles) {
+        next METAARTICLE if ref $MetaArticle ne 'HASH';
+
+        my $ArticleID = $Class->PositiveInt( $MetaArticle->{ArticleID} );
+        next METAARTICLE if !$ArticleID;
+
+        my $BackendObject = eval { $ArticleObject->BackendForArticle( %{$MetaArticle} ) };
+        return ( undef, ['Article backend lookup failed.'] ) if $@ || !$BackendObject;
+
+        my %ArticleData = eval {
+            $BackendObject->ArticleGet(
+                TicketID      => $TicketID,
+                ArticleID     => $ArticleID,
+                DynamicFields => 0,
+            );
+        };
+        return ( undef, ['Article content lookup failed.'] ) if $@ || !%ArticleData;
+
+        my $SafeArticle = {
+            TicketID                => 0 + ( $ArticleData{TicketID} || $TicketID ),
+            ArticleID               => 0 + ( $ArticleData{ArticleID} || $ArticleID ),
+            ArticleNumber           => 0 + ( $ArticleData{ArticleNumber} || 0 ),
+            From                    => $ArticleData{From} // q{},
+            To                      => $ArticleData{To} // q{},
+            Cc                      => $ArticleData{Cc} // q{},
+            Bcc                     => $ArticleData{Bcc} // q{},
+            Subject                 => $ArticleData{Subject} // q{},
+            Body                    => $ArticleData{Body} // q{},
+            ContentType             => $ArticleData{ContentType} // q{},
+            Charset                 => $ArticleData{Charset} // q{},
+            MimeType                => $ArticleData{MimeType} // q{},
+            SenderTypeID            => 0 + ( $ArticleData{SenderTypeID} || 0 ),
+            SenderType              => $ArticleData{SenderType} // q{},
+            CommunicationChannelID  => 0 + ( $ArticleData{CommunicationChannelID} || 0 ),
+            CommunicationChannel    => $ArticleData{CommunicationChannel} // q{},
+            IsVisibleForCustomer    => $ArticleData{IsVisibleForCustomer} ? 1 : 0,
+            IncomingTime            => 0 + ( $ArticleData{IncomingTime} || 0 ),
+            Created                 => $ArticleData{CreateTime} || $ArticleData{Created} || q{},
+            HTMLBodyAvailable       => 0,
+        };
+
+        my %HTMLIndex = eval {
+            $ArticleObject->ArticleAttachmentIndex(
+                TicketID      => $TicketID,
+                ArticleID     => $ArticleID,
+                OnlyHTMLBody  => 1,
+            );
+        };
+        return ( undef, ['HTML body attachment index lookup failed.'] ) if $@;
+
+        my @HTMLFileIDs = $Class->HTMLBodyFileIDs(%HTMLIndex);
+        return ( undef, ['HTML body attachment lookup is ambiguous.'] ) if @HTMLFileIDs > 1;
+
+        if (@HTMLFileIDs) {
+            my $FileID = $HTMLFileIDs[0];
+            my %Attachment = eval {
+                $ArticleObject->ArticleAttachment(
+                    TicketID  => $TicketID,
+                    ArticleID => $ArticleID,
+                    FileID    => $FileID,
+                );
+            };
+            return ( undef, ['HTML body attachment content lookup failed.'] ) if $@ || !%Attachment;
+
+            return ( undef, ['HTML body attachment type changed during lookup.'] )
+                if !$Class->HTMLBodyContentType( $Attachment{ContentType} );
+
+            $SafeArticle->{HTMLBodyAvailable}   = 1;
+            $SafeArticle->{HTMLBodyContentType} = $Attachment{ContentType} // $HTMLIndex{$FileID}->{ContentType} // q{};
+            $SafeArticle->{HTMLBodyContent}     = encode_base64( $Attachment{Content} // q{}, q{} );
+        }
+
+        push @Articles, $SafeArticle;
+    }
+
+    return ( \@Articles, [] );
 }
 
 sub InlineAttachmentData {

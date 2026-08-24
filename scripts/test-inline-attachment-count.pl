@@ -89,7 +89,9 @@ sub Assert {
 
         die 'forced index failure' if $Self->{FailIndex};
 
-        my $Index = $Self->{Indexes}->{ $Param{ArticleID} } || {};
+        my $Index = $Param{OnlyHTMLBody}
+            ? ( $Self->{HTMLIndexes}->{ $Param{ArticleID} } || {} )
+            : ( $Self->{Indexes}->{ $Param{ArticleID} } || {} );
         return %{$Index};
     }
 
@@ -123,6 +125,8 @@ my $ArticleObject = Test::Article->new(
         20  => [ { TicketID => 20, ArticleID => 200 } ],
         30  => [ { TicketID => 30, ArticleID => 300 } ],
         40  => [ { TicketID => 40, ArticleID => 400 }, { TicketID => 40, ArticleID => 401 } ],
+        50  => [ { TicketID => 50, ArticleID => 500 }, { TicketID => 50, ArticleID => 501 } ],
+        60  => [ { TicketID => 60, ArticleID => 600 }, { TicketID => 60, ArticleID => 601 } ],
         100 => [ { TicketID => 100, ArticleID => 1000 } ],
     },
     Indexes => {
@@ -151,6 +155,20 @@ my $ArticleObject = Test::Article->new(
         },
         1000 => {
             1 => { Disposition => 'inline', ContentType => 'image/png' },
+        },
+    },
+    HTMLIndexes => {
+        500 => {
+            1 => { Disposition => 'inline', ContentType => 'text/html; charset=utf-8' },
+        },
+        600 => {
+            1 => { Disposition => 'inline', ContentType => 'text/html' },
+        },
+        601 => {
+            1 => { Disposition => 'inline', ContentType => 'text/html; charset="utf-8"' },
+        },
+        1000 => {
+            1 => { Disposition => 'inline', ContentType => 'text/html' },
         },
     },
 );
@@ -185,8 +203,24 @@ my $OM = Test::OM->new(
         'matching attachments across multiple articles are summed',
     );
     Assert(
+        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketAttachmentMetadataCounts( TicketID => 10 )->{HTMLBodyArticleCount} == 0,
+        'ticket with no articles has no HTML body articles',
+    );
+    Assert(
+        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketAttachmentMetadataCounts( TicketID => 20 )->{HTMLBodyArticleCount} == 0,
+        'articles without HTML alternatives return 0',
+    );
+    Assert(
+        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketAttachmentMetadataCounts( TicketID => 50 )->{HTMLBodyArticleCount} == 1,
+        'one HTML article plus a plain-only article returns 1',
+    );
+    Assert(
+        Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketAttachmentMetadataCounts( TicketID => 60 )->{HTMLBodyArticleCount} == 2,
+        'several HTML articles are counted by article',
+    );
+    Assert(
         !$ArticleObject->{ArticleAttachmentCalled},
-        'ArticleAttachment is never called for inline attachment counting',
+        'ArticleAttachment is never called for metadata counting',
     );
 
     my $Operation = bless {}, 'Kernel::GenericInterface::Operation::Ticket::Search';
@@ -197,8 +231,11 @@ my $OM = Test::OM->new(
     Assert( ref $Ticket eq 'HASH', 'Ticket::Search returns a ticket object' );
     Assert( exists $Ticket->{InlineAttachmentCount}, 'Ticket::Search includes InlineAttachmentCount' );
     Assert( $Ticket->{InlineAttachmentCount} == 1, 'InlineAttachmentCount is an integer count' );
+    Assert( exists $Ticket->{HTMLBodyArticleCount}, 'Ticket::Search includes HTMLBodyArticleCount' );
+    Assert( $Ticket->{HTMLBodyArticleCount} == 1, 'HTMLBodyArticleCount is an integer count' );
     Assert( !exists $Ticket->{Attachments}, 'Ticket::Search must not expose attachment lists' );
     Assert( !exists $Ticket->{Content}, 'Ticket::Search must not expose attachment content' );
+    Assert( !exists $Ticket->{HTMLBodyContent}, 'Ticket::Search must not expose HTML content' );
 
     my $FailingArticleObject = Test::Article->new(
         Articles  => { 100 => [ { TicketID => 100, ArticleID => 1000 } ] },
@@ -215,7 +252,7 @@ my $OM = Test::OM->new(
     Assert( $FailedResponse->{Success}, 'metadata lookup failure still uses safe transport success' );
     Assert( @{ $FailedResponse->{Data}->{Tickets} } == 0, 'failed count does not return a ticket with a false zero' );
     Assert(
-        grep { $_ eq 'Inline attachment count failed.' } @{ $FailedResponse->{Data}->{Warnings} },
+        grep { $_ eq 'Article attachment metadata count failed.' } @{ $FailedResponse->{Data}->{Warnings} },
         'failed count returns a clear warning',
     );
 }

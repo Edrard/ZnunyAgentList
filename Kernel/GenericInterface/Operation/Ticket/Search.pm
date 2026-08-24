@@ -271,10 +271,10 @@ sub Run {
         );
         my @Tickets = $Ticket ? ($Ticket) : ();
         for my $TicketData (@Tickets) {
-            my $InlineAttachmentCount = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketInlineAttachmentCount(
+            my $AttachmentCounts = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketAttachmentMetadataCounts(
                 TicketID => $TicketData->{TicketID},
             );
-            if ( !defined $InlineAttachmentCount ) {
+            if ( !defined $AttachmentCounts ) {
                 return {
                     Success => 1,
                     Data    => {
@@ -285,12 +285,13 @@ sub Run {
                         Offset        => 0,
                         SortBy        => $SortBy,
                         SortDirection => $SortDirection,
-                        Warnings      => [ @Warnings, 'Inline attachment count failed.' ],
+                        Warnings      => [ @Warnings, 'Article attachment metadata count failed.' ],
                     },
                 };
             }
 
-            $TicketData->{InlineAttachmentCount} = 0 + $InlineAttachmentCount;
+            $TicketData->{InlineAttachmentCount} = 0 + $AttachmentCounts->{InlineAttachmentCount};
+            $TicketData->{HTMLBodyArticleCount}  = 0 + $AttachmentCounts->{HTMLBodyArticleCount};
         }
 
         return {
@@ -410,10 +411,10 @@ sub Run {
             UserID   => $UserID,
         );
         if ($Ticket) {
-            my $InlineAttachmentCount = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketInlineAttachmentCount(
+            my $AttachmentCounts = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->TicketAttachmentMetadataCounts(
                 TicketID => $Ticket->{TicketID},
             );
-            if ( !defined $InlineAttachmentCount ) {
+            if ( !defined $AttachmentCounts ) {
                 return {
                     Success => 1,
                     Data    => {
@@ -424,12 +425,13 @@ sub Run {
                         Offset        => $Offset,
                         SortBy        => $SortBy,
                         SortDirection => $SortDirection,
-                        Warnings      => ['Inline attachment count failed.'],
+                        Warnings      => ['Article attachment metadata count failed.'],
                     },
                 };
             }
 
-            $Ticket->{InlineAttachmentCount} = 0 + $InlineAttachmentCount;
+            $Ticket->{InlineAttachmentCount} = 0 + $AttachmentCounts->{InlineAttachmentCount};
+            $Ticket->{HTMLBodyArticleCount}  = 0 + $AttachmentCounts->{HTMLBodyArticleCount};
             push @Tickets, $Ticket;
         }
     }

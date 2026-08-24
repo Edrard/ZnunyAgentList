@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.2`.
+Current package version: `1.6.3`.
 
 The package provides a controlled REST surface for:
 
@@ -140,7 +140,7 @@ use standard Znuny `TicketQueueSet()`, `TicketCustomerSet()`, and
 
 - Znuny: `6.5.x` LTS
 - Current validation target: Znuny `6.5.20`
-- Typical Znuny home: `/opt/otrs`
+- Znuny home: set as `ZNUNY_HOME` in local shell examples
 - Typical runtime user: `otrs`
 - Typical server OS: Rocky Linux 8
 - Local development: Windows source editing and Git workflow
@@ -229,8 +229,8 @@ operations.
 | `GET` | `/ResolveTicketDefaults?Hostname=...` | `Ticket::ResolveTicketDefaults` | Resolve queue/customer defaults from host name | `Hostname` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
 | `GET` | `/ResolveTicketDefaults?HostName=...` | `Ticket::ResolveTicketDefaults` | Same as above with alternate parameter spelling | `HostName` | `Input`, `Detected`, `Queue`, `CustomerUser`, `Warnings[]` |
 | `POST` | `/ValidateTicketCreate` | `Ticket::ValidateTicketCreate` | Validate future TicketCreate data without creating a ticket | `OwnerID`, `Queue`, `CustomerUser`, `State`, `Lock` as available | `Valid`, `Errors[]`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
-| `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter | `Found`, safe ticket metadata, article sync summary, `SyncFingerprint`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicket/:TicketID` | `Ticket::Get` | Safe ticket lookup by ID | `TicketID` path parameter; optional `AllArticles=1` | `Found`, safe ticket metadata, optional top-level `Articles[]`, HTML alternative fields, article sync summary, `SyncFingerprint`, `Warnings[]` |
+| `GET` | `/ZnunyAgentListTicketNumber/:TicketNumber` | `Ticket::Get` | Safe ticket lookup by number | `TicketNumber` path parameter; optional `AllArticles=1` | `Found`, safe ticket metadata, optional top-level `Articles[]`, HTML alternative fields, article sync summary, `SyncFingerprint`, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicketSearch` | `Ticket::Search` | Safe filtered ticket search and total counting | filters such as `TicketNumber`, `Queue`, `StateType`, `CountOnly`, `Limit`, `Offset`, `Page`, `SortBy`, `SortDirection` | Safe `Tickets[]` with `InlineAttachmentCount`, page `Count`, matching `TotalCount`, pagination, `Warnings[]` |
 | `GET` | `/ZnunyAgentListTicket/:TicketID/Article/:ArticleID/InlineAttachment` | `Ticket::InlineAttachmentGet` | Fetch one inline image attachment | `TicketID` and `ArticleID` path parameters; `ContentID` query parameter | base64 image content and safe metadata |
 
@@ -308,7 +308,7 @@ Example `POST /TicketLock` body:
 
 ```json
 {
-  "TicketNumber": "2026062346000357"
+  "TicketNumber": "202601010000001"
 }
 ```
 
@@ -316,7 +316,7 @@ Example `POST /TicketUnlock` body:
 
 ```json
 {
-  "TicketNumber": "2026062346000357"
+  "TicketNumber": "202601010000001"
 }
 ```
 
@@ -412,7 +412,7 @@ Validate request:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "CustomerUserID": "customer.user@example.com"
 }
 ```
@@ -455,7 +455,7 @@ Execute uses the same request. Example response:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "CustomerID": "example-customer"
 }
 ```
@@ -476,7 +476,7 @@ Execute uses the same request. Example response:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "QueueID": "49",
   "CustomerUserID": "previous.customer@example.com"
 }
@@ -504,7 +504,7 @@ Without the required owner note:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "OwnerID": "31",
   "CustomerUserID": "customer.user@example.com"
 }
@@ -526,7 +526,7 @@ With the required note:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "OwnerID": "31",
   "CustomerUserID": "customer.user@example.com",
   "Note": "Assigning owner and customer from integration UI."
@@ -553,7 +553,7 @@ With the required note:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "OwnerLogin": "target.owner@example.com",
   "Note": "Assigning the ticket from integration UI."
 }
@@ -577,7 +577,7 @@ With the required note:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "QueueID": "49",
   "OwnerID": "31",
   "Note": "Moving and assigning the ticket."
@@ -604,7 +604,7 @@ With the required note:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "QueueID": "49",
   "OwnerID": "31",
   "CustomerUserID": "customer.user@example.com",
@@ -634,7 +634,7 @@ With the required note:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "OwnerID": "5",
   "Note": "Assigning locked owner test."
 }
@@ -658,7 +658,7 @@ In this example, current `OwnerID=6` is not assignable in target `QueueID=3`.
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "QueueID": "3"
 }
 ```
@@ -687,7 +687,7 @@ When the current owner is assignable in the target queue:
 
 ```json
 {
-  "TicketID": "57467",
+  "TicketID": "12345",
   "QueueID": "49"
 }
 ```
@@ -712,7 +712,7 @@ When the current owner is assignable in the target queue:
 
 ```json
 {
-  "TicketID": "57467"
+  "TicketID": "12345"
 }
 ```
 
@@ -738,7 +738,7 @@ Validate customer-only:
 ```bash
 curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign/Validate?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
   -H "Content-Type: application/json" \
-  -d '{"TicketID":"57467","CustomerUserID":"customer.user@example.com"}'
+  -d '{"TicketID":"12345","CustomerUserID":"customer.user@example.com"}'
 ```
 
 Execute customer-only:
@@ -746,7 +746,7 @@ Execute customer-only:
 ```bash
 curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
   -H "Content-Type: application/json" \
-  -d '{"TicketID":"57467","CustomerUserID":"customer.user@example.com"}'
+  -d '{"TicketID":"12345","CustomerUserID":"customer.user@example.com"}'
 ```
 
 Validate owner and customer with a note:
@@ -754,7 +754,7 @@ Validate owner and customer with a note:
 ```bash
 curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign/Validate?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
   -H "Content-Type: application/json" \
-  -d '{"TicketID":"57467","OwnerID":"31","CustomerUserID":"customer.user@example.com","Note":"Assigning owner and customer from integration UI."}'
+  -d '{"TicketID":"12345","OwnerID":"31","CustomerUserID":"customer.user@example.com","Note":"Assigning owner and customer from integration UI."}'
 ```
 
 Validate a queue-only move before attempting execution:
@@ -762,7 +762,7 @@ Validate a queue-only move before attempting execution:
 ```bash
 curl -sS -X POST "$ZNUNY_BASE_URL/TicketMoveAssign/Validate?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
   -H "Content-Type: application/json" \
-  -d '{"TicketID":"57467","QueueID":"3"}'
+  -d '{"TicketID":"12345","QueueID":"3"}'
 ```
 
 #### Integration Guidance
@@ -907,9 +907,9 @@ detect whether a linked ticket needs to be refreshed.
 
 `SyncFingerprint` is not an authentication token and is not a security secret.
 Safe ticket search returns only the article count and latest-article metadata
-needed for synchronization. Clients that require full article content should use
-an intentionally designed endpoint rather than `Ticket::Search`; this package
-does not add such an endpoint.
+needed for synchronization. Clients that require article bodies should use the
+custom `Ticket::Get` routes with `AllArticles=1`, and clients that require inline
+images should use `Ticket::InlineAttachmentGet`.
 
 ## API Response Examples
 
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.2",
+  "Version": "1.6.3",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.2",
+  "Version": "1.6.3",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -1435,7 +1435,23 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
 
 ### Safe Ticket Lookup
 
-`GET /ZnunyAgentListTicket/:TicketID`
+Existing custom routes:
+
+```text
+GET /ZnunyAgentListTicket/:TicketID
+GET /ZnunyAgentListTicketNumber/:TicketNumber
+```
+
+Both routes use the same `Ticket::Get` operation. The `TicketID` route resolves
+by numeric ticket ID; the `TicketNumber` route resolves by ticket number. The
+standard GenericTicketConnector route `/Ticket/:TicketID` is unchanged and does
+not gain the custom HTML article fields.
+
+Without `AllArticles=1`, and also with `AllArticles=0` or another accepted false
+value such as `false`, `no`, or `off`, `Ticket::Get` preserves the lightweight
+response shape. It returns `Found`, `Ticket`, and `Warnings`; `Articles` is
+absent. Article bodies and HTML body attachments are not loaded by the optional
+article flow.
 
 ```json
 {
@@ -1477,9 +1493,34 @@ Validation failures keep HTTP transport success but return `Valid: 0`:
 }
 ```
 
-`GET /ZnunyAgentListTicketNumber/:TicketNumber` returns the same safe ticket
-shape, including the article sync summary and `SyncFingerprint`, using
-`TicketNumber` lookup:
+TicketID lookup example:
+
+```bash
+curl -skG "$ZNUNY_BASE_URL/ZnunyAgentListTicket/12345" \
+  --data-urlencode "UserLogin=$ZNUNY_API_USER" \
+  --data-urlencode "Password=$ZNUNY_API_PASS" \
+  --data-urlencode "AllArticles=1" \
+  --data-urlencode "Attachments=0" \
+  --data-urlencode "DynamicFields=0"
+```
+
+TicketNumber lookup example:
+
+```bash
+curl -skG "$ZNUNY_BASE_URL/ZnunyAgentListTicketNumber/202601010000001" \
+  --data-urlencode "UserLogin=$ZNUNY_API_USER" \
+  --data-urlencode "Password=$ZNUNY_API_PASS" \
+  --data-urlencode "AllArticles=1" \
+  --data-urlencode "Attachments=0" \
+  --data-urlencode "DynamicFields=0"
+```
+
+With `AllArticles=1`, both custom routes return the same safe ticket metadata
+plus a top-level `Articles` array. `Articles` is not nested inside `Ticket`.
+Article ordering follows Znuny's native article retrieval order after HTML
+lookups and content loading. `Attachments=0` prevents regular attachment output,
+but it does not disable the internal HTML-body lookup. `DynamicFields=0` does
+not introduce dynamic fields. No new endpoint is added for this flow.
 
 ```json
 {
@@ -1496,6 +1537,46 @@ shape, including the article sync summary and `SyncFingerprint`, using
     "LastArticleCreated": "2026-01-01 10:30:00",
     "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
   },
+  "Articles": [
+    {
+      "TicketID": 12345,
+      "ArticleID": 67890,
+      "ArticleNumber": 1,
+      "Subject": "Example message",
+      "Body": "Original plain-text article body.",
+      "ContentType": "text/plain; charset=utf-8",
+      "Charset": "utf-8",
+      "MimeType": "text/plain",
+      "SenderTypeID": 1,
+      "SenderType": "agent",
+      "CommunicationChannelID": 1,
+      "CommunicationChannel": "Email",
+      "IsVisibleForCustomer": 1,
+      "IncomingTime": 1800000000,
+      "Created": "2026-01-01 10:00:00",
+      "HTMLBodyAvailable": 1,
+      "HTMLBodyContentType": "text/html; charset=utf-8",
+      "HTMLBodyContent": "PHA+RXhhbXBsZTwvcD4="
+    },
+    {
+      "TicketID": 12345,
+      "ArticleID": 67891,
+      "ArticleNumber": 2,
+      "Subject": "Plain message",
+      "Body": "Plain-text article without an HTML alternative.",
+      "ContentType": "text/plain; charset=utf-8",
+      "Charset": "utf-8",
+      "MimeType": "text/plain",
+      "SenderTypeID": 1,
+      "SenderType": "agent",
+      "CommunicationChannelID": 1,
+      "CommunicationChannel": "Email",
+      "IsVisibleForCustomer": 0,
+      "IncomingTime": 1800000060,
+      "Created": "2026-01-01 10:01:00",
+      "HTMLBodyAvailable": 0
+    }
+  ],
   "Warnings": []
 }
 ```
@@ -1512,12 +1593,69 @@ Not found:
 }
 ```
 
+### Ticket Articles And HTML Alternatives
+
+An email article can have a visible or fallback `text/plain` body while Znuny
+also stores a separate hidden `text/html` MIME alternative. `Ticket::Get` does
+not replace or modify the existing article `Body`, `MimeType`, or `ContentType`.
+Those fields remain as Znuny returns them.
+
+When requested with `AllArticles=1`, each returned article always includes
+`HTMLBodyAvailable` as a JSON integer:
+
+- `HTMLBodyAvailable: 1`: `HTMLBodyContentType` and `HTMLBodyContent` are both
+  present.
+- `HTMLBodyAvailable: 0`: `HTMLBodyContentType` and `HTMLBodyContent` are both
+  absent, not `null` or empty strings.
+
+`HTMLBodyContentType` preserves the native HTML MIME type and charset parameters,
+such as `text/html; charset=utf-8`. `HTMLBodyContent` is no-wrap base64 of the
+original, unmodified HTML bytes. Decoding it returns the exact original byte
+sequence. The plugin performs no HTML charset conversion, sanitization, CID
+rewriting, HTML normalization, newline normalization, or image-position
+heuristics.
+
+HTML alternatives are selected through Znuny's native HTML body attachment index.
+Existing `cid:` references in the HTML already determine the correct inline
+image positions. Use the existing `Ticket::InlineAttachmentGet` operation to
+retrieve allowed inline images by `TicketID`, `ArticleID`, and `ContentID`.
+
+Consuming applications must treat decoded email HTML as untrusted input and
+apply appropriate HTML sanitization before browser rendering.
+
+PDF, plain text, inline images, ordinary attachments, SVG, malformed MIME types,
+and other non-HTML parts are not treated as HTML bodies.
+
+Example article with an HTML alternative:
+
+```json
+{
+  "ArticleID": 67890,
+  "Body": "Plain text fallback body.",
+  "MimeType": "text/plain",
+  "ContentType": "text/plain; charset=utf-8",
+  "HTMLBodyAvailable": 1,
+  "HTMLBodyContentType": "text/html; charset=utf-8",
+  "HTMLBodyContent": "PGh0bWw+PGJvZHk+PHA+RXhhbXBsZSDQnzwvcD48aW1nIHNyYz0iY2lkOmlubGluZS1hbHBoYSI+PGltZyBzcmM9ImNpZDppbmxpbmUtYmV0YSI+PC9ib2R5PjwvaHRtbD4="
+}
+```
+
+Example article without an HTML alternative:
+
+```json
+{
+  "ArticleID": 67891,
+  "Body": "Plain text body.",
+  "MimeType": "text/plain",
+  "ContentType": "text/plain; charset=utf-8",
+  "HTMLBodyAvailable": 0
+}
+```
+
 ### Inline Article Images
 
-`Ticket::Get` intentionally remains a safe metadata lookup. It does not return
-article bodies or attachment content. Use `Ticket::InlineAttachmentGet` only
-after another trusted article source has found an HTML `cid:` reference that
-belongs to a ticket article.
+Use `Ticket::InlineAttachmentGet` only after an article body or HTML alternative
+has exposed a `cid:` reference that belongs to a ticket article.
 
 `GET /ZnunyAgentListTicket/:TicketID/Article/:ArticleID/InlineAttachment?ContentID=...`
 
@@ -1662,7 +1800,7 @@ with `TotalCount: 0`, `Limit: 0`, and the required-filter warning.
 
 Exact ticket number:
 
-`GET /ZnunyAgentListTicketSearch?TicketNumber=2026062346000357`
+`GET /ZnunyAgentListTicketSearch?TicketNumber=202601010000001`
 
 State name:
 
@@ -1734,10 +1872,18 @@ is normalized as JPEG. Ordinary attachments, missing or non-inline
 dispositions, PDF, DOCX, SVG, unknown, malformed, and other non-allowed MIME
 types are not counted. The response does not include attachment content, base64
 data, filenames, attachment metadata, or an attachment list through this field.
+`HTMLBodyArticleCount` is also present on every returned ticket object as a
+non-negative JSON integer. It counts articles that have at least one valid
+stored HTML body alternative discovered with Znuny's `OnlyHTMLBody` attachment
+index mode. It does not count the number of HTML attachments, and it does not
+return HTML content, base64 data, filenames, attachment metadata, or attachment
+lists in search results.
 
 - `ArticleCount`: safe count of articles.
 - `InlineAttachmentCount`: non-negative integer count of matching inline raster
   image attachments across all ticket articles.
+- `HTMLBodyArticleCount`: non-negative integer count of articles with a stored
+  `text/html` body alternative.
 - `LastArticleID`: newest article ID.
 - `LastArticleCreated`: creation timestamp of the newest article.
 - `SyncFingerprint`: stable hash for external synchronization comparisons.
@@ -1745,11 +1891,11 @@ data, filenames, attachment metadata, or an attachment list through this field.
 `SyncFingerprint` changes when safe ticket metadata changes or when a new
 article, note, or reply is added.
 
-Compatibility smoke testing against Znuny 6.5.20 confirmed that the health
-endpoint reports version `1.6.2`, exact ticket-number search can return a ticket
-with `InlineAttachmentCount: 1` for a known inline JPEG, and queue-filtered
-search results include the field on every returned ticket with valid
-non-negative integer values.
+Compatibility smoke testing for the 1.6.2 release against Znuny 6.5.20
+confirmed that exact ticket-number search can return a ticket with
+`InlineAttachmentCount: 1` for a known inline JPEG, and queue-filtered search
+results include the field on every returned ticket with valid non-negative
+integer values.
 
 Example safe response:
 
@@ -1757,8 +1903,8 @@ Example safe response:
 {
   "Tickets": [
     {
-      "TicketID": "57250",
-      "TicketNumber": "2026062346000357",
+      "TicketID": "12345",
+      "TicketNumber": "202601010000001",
       "Title": "Example ticket",
       "QueueID": "49",
       "Queue": "Customer Projects",
@@ -1786,7 +1932,8 @@ Example safe response:
       "Changed": "2026-06-23 16:44:55",
       "ArticleCount": "2",
       "InlineAttachmentCount": 1,
-      "LastArticleID": "340615",
+      "HTMLBodyArticleCount": 1,
+      "LastArticleID": "67890",
       "LastArticleCreated": "2026-06-23 16:44:54",
       "SyncFingerprint": "sha256-hex-string"
     }
@@ -1834,6 +1981,7 @@ Combined filters:
       "Changed": "2026-01-01 10:30:00",
       "ArticleCount": "2",
       "InlineAttachmentCount": 0,
+      "HTMLBodyArticleCount": 0,
       "LastArticleID": "67890",
       "LastArticleCreated": "2026-01-01 10:30:00",
       "SyncFingerprint": "4d967f2b7a1f4c7e9d0cbb7f3f7e2b8c4b3f0d4e2a1c9f8e7d6c5b4a3f2e1d0c"
@@ -1906,8 +2054,8 @@ Combined filters:
 ```json
 {
   "Ticket": {
-    "TicketID": "57250",
-    "TicketNumber": "2026062346000357",
+    "TicketID": "12345",
+    "TicketNumber": "202601010000001",
     "LockID": "2",
     "Lock": "lock",
     "State": "new",
@@ -1922,8 +2070,8 @@ Combined filters:
 ```json
 {
   "Ticket": {
-    "TicketID": "57250",
-    "TicketNumber": "2026062346000357",
+    "TicketID": "12345",
+    "TicketNumber": "202601010000001",
     "LockID": "1",
     "Lock": "unlock",
     "State": "new",
@@ -1972,8 +2120,8 @@ Combined filters:
 ```json
 {
   "Success": 1,
-  "TicketID": 57250,
-  "TicketNumber": "2026062346000357",
+  "TicketID": 12345,
+  "TicketNumber": "202601010000001",
   "QueueChanged": 1,
   "OwnerChanged": 1,
   "CustomerChanged": 1,
@@ -2132,29 +2280,32 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.2.opm
+/path/to/output/ZnunyAgentList-1.6.3.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
 
+Set `ZNUNY_HOME` to the Znuny application directory used by the server before
+running these examples.
+
 Install:
 
 ```bash
-cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.2.opm" otrs
+cd "$ZNUNY_HOME"
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.3.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
-cd /opt/otrs
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.2.opm" otrs
+cd "$ZNUNY_HOME"
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.3.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:
 
 ```bash
-cd /opt/otrs
+cd "$ZNUNY_HOME"
 su -s /bin/bash -c "bin/otrs.Console.pl Maint::Config::Rebuild" otrs
 su -s /bin/bash -c "bin/otrs.Console.pl Maint::Cache::Delete" otrs
 ```

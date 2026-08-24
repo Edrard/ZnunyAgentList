@@ -1,5 +1,10 @@
 # ZnunyAgentList Changelog
 
+## 1.6.3 - Unreleased
+
+- Added `HTMLBodyArticleCount` to safe `Ticket::Search` ticket objects using metadata-only HTML body detection.
+- Added safe HTML alternative fields to existing `Ticket::Get` article objects without changing plain text article body fields.
+
 ## 1.6.2 - 2026-08-20
 
 - Added `InlineAttachmentCount` to safe `Ticket::Search` ticket objects, counting inline PNG, JPEG, GIF, and WebP attachments across all ticket articles without returning attachment metadata or content.
