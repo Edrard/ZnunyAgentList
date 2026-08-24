@@ -1,6 +1,6 @@
 # ZnunyAgentList Changelog
 
-## 1.6.3 - Unreleased
+## 1.6.3 - 2026-08-24
 
 - Added `HTMLBodyArticleCount` to safe `Ticket::Search` ticket objects using metadata-only HTML body detection.
 - Added safe HTML alternative fields to existing `Ticket::Get` article objects without changing plain text article body fields.
