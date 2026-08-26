@@ -2,7 +2,7 @@
 Debugger:
   DebugThreshold: debug
   TestMode: '0'
-Description: AdvancedZnunyAgentListREST import template for ZnunyAgentList 1.6.4
+Description: AdvancedZnunyAgentListREST import template for ZnunyAgentList 1.6.5
 FrameworkVersion: 6.5.20
 Provider:
   Operation:

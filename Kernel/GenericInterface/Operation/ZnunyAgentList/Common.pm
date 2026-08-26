@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.4';
+use constant PACKAGE_VERSION => '1.6.5';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
@@ -313,6 +313,7 @@ sub NonNegativeInt {
     $String =~ s/\s+$//;
 
     return if $String eq q{} || $String !~ m{\A(?:0|[1-9][0-9]*)\z};
+    return 0 if $String eq '0';
 
     my $MaxOffset = CUSTOMER_COMPANY_MAX_OFFSET;
     return if length $String > length $MaxOffset;

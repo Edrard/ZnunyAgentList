@@ -53,6 +53,12 @@ sub AssertJsonNumber {
     Assert( $JSON !~ m{"\Q$Key\E":"\Q$Value\E"}, "$Message must not be serialized as a string" );
 }
 
+sub CompanyIDs {
+    my ($Companies) = @_;
+
+    return join q{,}, map { $_->{CustomerID} } @{ $Companies || [] };
+}
+
 {
     package Test::Config;
 
@@ -250,6 +256,28 @@ AssertJsonNumber( $DefaultData, 'Offset', 0, 'Offset serializes as JSON number' 
 AssertJsonNumber( $DefaultData, 'HasMore', 1, 'HasMore serializes as JSON number' );
 Assert( $DefaultData->{HasMore} == 0 || $DefaultData->{HasMore} == 1, 'HasMore is an integer 0 or 1' );
 
+my $StringZeroResponse = RunOperation( Data => { Limit => 50, Offset => '0' } );
+my $StringZeroData = $StringZeroResponse->{Data};
+Assert( $StringZeroResponse->{Success} == 1, 'query-style string Offset 0 succeeds' );
+Assert( !@{ $StringZeroData->{Errors} }, 'query-style string Offset 0 has no errors' );
+Assert( $StringZeroData->{Offset} == 0, 'query-style string Offset 0 returns numeric Offset 0' );
+Assert( $StringZeroData->{Count} == $DefaultData->{Count}, 'query-style string Offset 0 Count matches omitted Offset' );
+Assert( $StringZeroData->{TotalCount} == $DefaultData->{TotalCount}, 'query-style string Offset 0 TotalCount matches omitted Offset' );
+Assert( $StringZeroData->{Limit} == $DefaultData->{Limit}, 'query-style string Offset 0 Limit matches omitted Offset' );
+Assert( $StringZeroData->{HasMore} == $DefaultData->{HasMore}, 'query-style string Offset 0 HasMore matches omitted Offset' );
+Assert(
+    CompanyIDs( $StringZeroData->{CustomerCompanies} ) eq CompanyIDs( $DefaultData->{CustomerCompanies} ),
+    'query-style string Offset 0 returns the same first page companies as omitted Offset',
+);
+AssertJsonNumber( $StringZeroData, 'Offset', 0, 'query-style string Offset 0 serializes Offset as JSON number 0' );
+
+my $NumericZeroResponse = RunOperation( Data => { Limit => 50, Offset => 0 } );
+Assert( !@{ $NumericZeroResponse->{Data}->{Errors} }, 'numeric Offset 0 has no errors' );
+Assert(
+    CompanyIDs( $NumericZeroResponse->{Data}->{CustomerCompanies} ) eq CompanyIDs( $DefaultData->{CustomerCompanies} ),
+    'numeric Offset 0 returns the same first page companies as omitted Offset',
+);
+
 my $LimitResponse = RunOperation( Data => { Limit => 250 } );
 Assert( $LimitResponse->{Data}->{Limit} == 100, 'Limit is capped at 100' );
 Assert( @{ $LimitResponse->{Data}->{CustomerCompanies} } == 100, 'Limit 250 returns at most 100 rows' );
@@ -289,6 +317,17 @@ Assert(
     join( q{,}, map { $_->{CustomerID} } @{ $DuplicateBoundaryResponse->{Data}->{CustomerCompanies} } ) eq 'same-002,same-003',
     'page boundary inside identical-name group remains deterministic',
 );
+
+my $StringOneResponse = RunOperation( Data => { Limit => 50, Offset => '1' } );
+Assert( $StringOneResponse->{Data}->{Offset} == 1, 'query-style string Offset 1 is accepted' );
+Assert( $StringOneResponse->{Data}->{Count} == 50, 'query-style string Offset 1 returns a full page' );
+Assert( !@{ $StringOneResponse->{Data}->{Errors} }, 'query-style string Offset 1 has no errors' );
+
+my $StringFiftyResponse = RunOperation( Data => { Limit => 50, Offset => '50' } );
+Assert( $StringFiftyResponse->{Data}->{Offset} == 50, 'query-style string Offset 50 is accepted' );
+Assert( $StringFiftyResponse->{Data}->{Count} == 50, 'query-style string Offset 50 returns the second page' );
+Assert( $StringFiftyResponse->{Data}->{HasMore} == 1, 'query-style string Offset 50 reports more data' );
+Assert( !@{ $StringFiftyResponse->{Data}->{Errors} }, 'query-style string Offset 50 has no errors' );
 
 my $BoundaryResponse = RunOperation( Data => { Limit => 100, Offset => scalar @ExpectedAll } );
 Assert( @{ $BoundaryResponse->{Data}->{CustomerCompanies} } == 0, 'Offset equal to TotalCount returns an empty page' );

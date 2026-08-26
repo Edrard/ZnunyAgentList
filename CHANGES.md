@@ -1,5 +1,9 @@
 # ZnunyAgentList Changelog
 
+## 1.6.5 - Unreleased
+
+- Fixed explicit `Offset=0` handling in `CustomerCompany::List` so query-string zero is accepted as the first page.
+
 ## 1.6.4 - Unreleased
 
 - Added `Limit`, `Offset`, `Count`, `TotalCount`, and `HasMore` pagination metadata to `CustomerCompany::List`.
