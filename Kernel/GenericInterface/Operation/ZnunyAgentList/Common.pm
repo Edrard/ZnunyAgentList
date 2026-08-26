@@ -9,9 +9,10 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.3';
+use constant PACKAGE_VERSION => '1.6.4';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
+use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
 
 sub New {
     my ( $Class, $Type, %Param ) = @_;
@@ -299,6 +300,25 @@ sub PositiveInt {
     return if !defined $Value || $Value !~ m{\A[1-9][0-9]*\z};
 
     return 0 + $Value;
+}
+
+sub NonNegativeInt {
+    my ( $Class, $Value ) = @_;
+
+    return if !defined $Value || ref $Value;
+
+    my $String = "$Value";
+    $String =~ s/[\x00-\x1f\x7f]//g;
+    $String =~ s/^\s+//;
+    $String =~ s/\s+$//;
+
+    return if $String eq q{} || $String !~ m{\A(?:0|[1-9][0-9]*)\z};
+
+    my $MaxOffset = CUSTOMER_COMPANY_MAX_OFFSET;
+    return if length $String > length $MaxOffset;
+    return if length $String == length $MaxOffset && $String gt $MaxOffset;
+
+    return 0 + $String;
 }
 
 sub Boolean {
@@ -955,31 +975,81 @@ sub CustomerCompanyLookup {
 sub CustomerCompanyListData {
     my ( $Class, %Param ) = @_;
 
-    return ( [], ['Search must be a scalar string.'] ) if ref $Param{Search};
+    my $ErrorMeta = {
+        Count      => 0,
+        TotalCount => 0,
+        Limit      => 50,
+        Offset     => 0,
+        HasMore    => 0,
+    };
+
+    return ( [], ['Search must be a scalar string.'], $ErrorMeta ) if ref $Param{Search};
+    return ( [], ['Limit must be a scalar integer.'],  $ErrorMeta ) if ref $Param{Limit};
+    return ( [], ['Offset must be a scalar integer.'], $ErrorMeta ) if ref $Param{Offset};
 
     my $Search = $Class->SafeString( $Param{Search}, 100 );
     my $Limit  = $Class->Limit( $Param{Limit}, 50, 100 );
+    my $Offset = 0;
+
+    if ( defined $Param{Offset} ) {
+        my $ParsedOffset = $Class->NonNegativeInt( $Param{Offset} );
+        return (
+            [],
+            ['Offset must be a non-negative integer no larger than 2147483647.'],
+            {
+                Count      => 0,
+                TotalCount => 0,
+                Limit      => 0 + $Limit,
+                Offset     => 0,
+                HasMore    => 0,
+            },
+        ) if !defined $ParsedOffset;
+
+        $Offset = $ParsedOffset;
+    }
 
     my $CustomerCompanyObject = eval { $Kernel::OM->Get('Kernel::System::CustomerCompany') };
-    return ( [], ['Customer company API is unavailable.'] ) if !$CustomerCompanyObject;
+    return (
+        [],
+        ['Customer company API is unavailable.'],
+        {
+            Count      => 0,
+            TotalCount => 0,
+            Limit      => 0 + $Limit,
+            Offset     => 0 + $Offset,
+            HasMore    => 0,
+        },
+    ) if !$CustomerCompanyObject;
 
+    # Znuny CustomerCompanyList supports native Limit but no Offset. Fetch the full
+    # valid match set, sort deterministically, then slice locally for pagination.
     my %CompanyList = eval {
         $Search eq q{}
             ? $CustomerCompanyObject->CustomerCompanyList(
                 Valid => 1,
-                Limit => $Limit,
+                Limit => 0,
             )
             : $CustomerCompanyObject->CustomerCompanyList(
                 Search => $Search,
                 Valid  => 1,
-                Limit  => $Limit,
+                Limit  => 0,
             );
     };
-    return ( [], ['Customer company lookup failed.'] ) if $@;
+    return (
+        [],
+        ['Customer company lookup failed.'],
+        {
+            Count      => 0,
+            TotalCount => 0,
+            Limit      => 0 + $Limit,
+            Offset     => 0 + $Offset,
+            HasMore    => 0,
+        },
+    ) if $@;
 
     my @Companies;
     for my $CustomerID ( sort { lc($a) cmp lc($b) } grep { defined && $_ ne q{} } keys %CompanyList ) {
-        my $Company = $Class->CustomerCompanyLookup($CustomerID) || {
+        my $Company = {
             CustomerID          => $CustomerID,
             CustomerCompanyName => $CompanyList{$CustomerID} // q{},
         };
@@ -989,9 +1059,32 @@ sub CustomerCompanyListData {
     @Companies = sort {
         lc( $a->{CustomerCompanyName} // q{} ) cmp lc( $b->{CustomerCompanyName} // q{} )
             || lc( $a->{CustomerID} // q{} ) cmp lc( $b->{CustomerID} // q{} )
+            || ( $a->{CustomerCompanyName} // q{} ) cmp ( $b->{CustomerCompanyName} // q{} )
+            || ( $a->{CustomerID} // q{} ) cmp ( $b->{CustomerID} // q{} )
     } @Companies;
 
-    return ( \@Companies, [] );
+    my $TotalCount = scalar @Companies;
+    my @Page;
+    my $Remaining = 0;
+    my $PageSize  = 0;
+    if ( $Offset < $TotalCount ) {
+        $Remaining = $TotalCount - $Offset;
+        $PageSize  = $Remaining < $Limit ? $Remaining : $Limit;
+        my $LastIndex = $Offset + $PageSize - 1;
+        @Page = @Companies[ $Offset .. $LastIndex ];
+    }
+
+    return (
+        \@Page,
+        [],
+        {
+            Count      => 0 + scalar @Page,
+            TotalCount => 0 + $TotalCount,
+            Limit      => 0 + $Limit,
+            Offset     => 0 + $Offset,
+            HasMore    => ( $PageSize && $PageSize < $Remaining ) ? 1 : 0,
+        },
+    );
 }
 
 sub CustomerUserLookupData {

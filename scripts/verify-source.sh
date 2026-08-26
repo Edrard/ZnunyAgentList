@@ -50,6 +50,7 @@ require_file 'scripts/test-assignable-queues.pl'
 require_file 'scripts/test-inline-attachment.pl'
 require_file 'scripts/test-inline-attachment-count.pl'
 require_file 'scripts/test-html-body-articles.pl'
+require_file 'scripts/test-customer-company-list.pl'
 require_file 'scripts/test-customer-user-write.pl'
 require_file 'Kernel/GenericInterface/Operation/User/AssignableQueues.pm'
 require_file 'Kernel/GenericInterface/Operation/Ticket/InlineAttachmentGet.pm'
@@ -62,7 +63,7 @@ require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 SOPM="$ROOT/ZnunyAgentList.sopm"
 CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 WEBSERVICE_YAML="$ROOT/examples/webservices/AdvancedZnunyAgentListREST.yml"
-EXPECTED_VERSION='1.6.3'
+EXPECTED_VERSION='1.6.4'
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'
@@ -561,6 +562,9 @@ if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'POST /CustomerUser' "$ROOT/README.md" \
     && grep -Fq 'PATCH /CustomerUser/:CustomerUserLogin' "$ROOT/README.md" \
     && grep -Fq 'GET /CustomerCompany' "$ROOT/README.md" \
+    && grep -Fq 'TotalCount' "$ROOT/README.md" \
+    && grep -Fq 'HasMore' "$ROOT/README.md" \
+    && grep -Fq 'Offset' "$ROOT/README.md" \
     && grep -Fq 'Company ID' "$ROOT/README.md" \
     && grep -Fq 'Password input is not supported' "$ROOT/README.md" \
     && grep -Fq 'generates a private random password' "$ROOT/README.md" \
@@ -589,6 +593,12 @@ if command -v perl >/dev/null 2>&1; then
         pass 'HTML body article regression harness passed'
     else
         fail 'HTML body article regression harness failed'
+    fi
+
+    if perl "$ROOT/scripts/test-customer-company-list.pl"; then
+        pass 'Customer company list pagination regression harness passed'
+    else
+        fail 'Customer company list pagination regression harness failed'
     fi
 
     if perl "$ROOT/scripts/test-customer-user-write.pl"; then

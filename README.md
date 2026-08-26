@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.3`.
+Current package version: `1.6.4`.
 
 The package provides a controlled REST surface for:
 
@@ -220,7 +220,7 @@ operations.
 | `GET` | `/CustomerUser?Search=...&Limit=...` | `CustomerUser::Search` | Search customer users | `Search`, optional `Limit` capped at `50` | `CustomerUsers[]`, optional `Warnings[]` |
 | `GET` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Get` | Get one customer user | `CustomerUserLogin` path parameter | `CustomerUser.Found`, safe customer fields |
 | `GET` | `/CustomerUserLookup` | `CustomerUser::Lookup` | Exact customer existence lookup | `Login` and/or `Email` | `Found`, `CustomerUser`, `Errors[]` |
-| `GET` | `/CustomerCompany` | `CustomerCompany::List` | List valid customer company IDs | optional `Search`, optional `Limit`; default `50`, max `100` | `CustomerCompanies[]`, `Errors[]` |
+| `GET` | `/CustomerCompany` | `CustomerCompany::List` | List valid customer company IDs | optional `Search`, `Limit`, `Offset`; default `Limit=50`, max `100`, default `Offset=0` | `CustomerCompanies[]`, `Count`, `TotalCount`, `Limit`, `Offset`, `HasMore`, `Errors[]` |
 | `GET` | `/TicketState` | `Ticket::StateList` | List ticket states | none | `TicketStates[]` |
 | `GET` | `/TicketPriority` | `Ticket::PriorityList` | List ticket priorities | none | `TicketPriorities[]` |
 | `GET` | `/TicketType` | `Ticket::TypeList` | List ticket types | none | `TicketTypes[]`, optional warnings |
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.3",
+  "Version": "1.6.4",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.3",
+  "Version": "1.6.4",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -1279,7 +1279,7 @@ Duplicate exact email:
 If an email matches multiple active customer users, the lookup returns
 `Found: 0` with that error instead of choosing one arbitrarily.
 
-`GET /CustomerCompany?Search=example&Limit=20`
+`GET /CustomerCompany?Search=example&Limit=20&Offset=0`
 
 ```json
 {
@@ -1289,6 +1289,11 @@ If an email matches multiple active customer users, the lookup returns
       "CustomerCompanyName": "Example Customer"
     }
   ],
+  "Count": 1,
+  "TotalCount": 1,
+  "Limit": 20,
+  "Offset": 0,
+  "HasMore": 0,
   "Errors": []
 }
 ```
@@ -1297,8 +1302,18 @@ The UI label `Company ID` maps to Znuny `CustomerID`. Use
 `CustomerCompany::List` to populate a selector/autocomplete, then send the
 selected `CustomerID` as `CustomerID` when creating or updating a customer user.
 `Search` is optional, scalar, bounded to 100 characters, and passed to Znuny's
-standard customer company search. `Limit` defaults to `50`, is capped at `100`,
-and results are sorted deterministically by company name and then customer ID.
+standard customer company search before counting and paging. `Limit` defaults
+to `50` and is capped at `100`. `Offset` is optional, zero-based, and must be a
+scalar decimal integer from `0` through `2147483647`; malformed or oversized
+values are rejected rather than clamped. Results are sorted deterministically
+before slicing by case-insensitive customer company name, case-insensitive
+customer ID, raw customer company name, and raw customer ID.
+`TotalCount` is the number of valid matching companies before pagination,
+`Count` is the current page length, and `HasMore` is `1` when another page is
+available or `0` when it is not. If `Offset` is equal to or greater than
+`TotalCount`, the endpoint returns an empty `CustomerCompanies` list with
+`CustomerCompanies=[]`, `Count=0`, and `HasMore=0`. Each company item exposes
+only `CustomerID` and `CustomerCompanyName`.
 
 ### Ticket Dictionaries
 
@@ -2280,7 +2295,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.3.opm
+/path/to/output/ZnunyAgentList-1.6.4.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -2292,14 +2307,14 @@ Install:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.3.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.4.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.3.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.4.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:
