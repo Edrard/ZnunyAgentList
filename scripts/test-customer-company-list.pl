@@ -258,24 +258,46 @@ Assert( $DefaultData->{HasMore} == 0 || $DefaultData->{HasMore} == 1, 'HasMore i
 
 my $StringZeroResponse = RunOperation( Data => { Limit => 50, Offset => '0' } );
 my $StringZeroData = $StringZeroResponse->{Data};
-Assert( $StringZeroResponse->{Success} == 1, 'query-style string Offset 0 succeeds' );
-Assert( !@{ $StringZeroData->{Errors} }, 'query-style string Offset 0 has no errors' );
-Assert( $StringZeroData->{Offset} == 0, 'query-style string Offset 0 returns numeric Offset 0' );
-Assert( $StringZeroData->{Count} == $DefaultData->{Count}, 'query-style string Offset 0 Count matches omitted Offset' );
-Assert( $StringZeroData->{TotalCount} == $DefaultData->{TotalCount}, 'query-style string Offset 0 TotalCount matches omitted Offset' );
-Assert( $StringZeroData->{Limit} == $DefaultData->{Limit}, 'query-style string Offset 0 Limit matches omitted Offset' );
-Assert( $StringZeroData->{HasMore} == $DefaultData->{HasMore}, 'query-style string Offset 0 HasMore matches omitted Offset' );
+Assert( $StringZeroResponse->{Success} == 1, 'Data string Offset 0 succeeds' );
+Assert( !@{ $StringZeroData->{Errors} }, 'Data string Offset 0 has no errors' );
+Assert( $StringZeroData->{Offset} == 0, 'Data string Offset 0 returns numeric Offset 0' );
+Assert( $StringZeroData->{Count} == $DefaultData->{Count}, 'Data string Offset 0 Count matches omitted Offset' );
+Assert( $StringZeroData->{TotalCount} == $DefaultData->{TotalCount}, 'Data string Offset 0 TotalCount matches omitted Offset' );
+Assert( $StringZeroData->{Limit} == $DefaultData->{Limit}, 'Data string Offset 0 Limit matches omitted Offset' );
+Assert( $StringZeroData->{HasMore} == $DefaultData->{HasMore}, 'Data string Offset 0 HasMore matches omitted Offset' );
 Assert(
     CompanyIDs( $StringZeroData->{CustomerCompanies} ) eq CompanyIDs( $DefaultData->{CustomerCompanies} ),
-    'query-style string Offset 0 returns the same first page companies as omitted Offset',
+    'Data string Offset 0 returns the same first page companies as omitted Offset',
 );
-AssertJsonNumber( $StringZeroData, 'Offset', 0, 'query-style string Offset 0 serializes Offset as JSON number 0' );
+AssertJsonNumber( $StringZeroData, 'Offset', 0, 'Data string Offset 0 serializes Offset as JSON number 0' );
+
+my $TopLevelStringZeroResponse = RunOperation( Limit => 50, Offset => '0' );
+my $TopLevelStringZeroData = $TopLevelStringZeroResponse->{Data};
+Assert( $TopLevelStringZeroResponse->{Success} == 1, 'top-level query-style string Offset 0 reaches final Run success path' );
+Assert( !@{ $TopLevelStringZeroData->{Errors} }, 'top-level query-style string Offset 0 has no validation errors' );
+Assert( $TopLevelStringZeroData->{Offset} == 0, 'top-level query-style string Offset 0 returns numeric Offset 0' );
+Assert( $TopLevelStringZeroData->{Count} == $DefaultData->{Count}, 'top-level query-style string Offset 0 Count matches omitted Offset' );
+Assert( $TopLevelStringZeroData->{TotalCount} == $DefaultData->{TotalCount}, 'top-level query-style string Offset 0 TotalCount matches omitted Offset' );
+Assert( $TopLevelStringZeroData->{Limit} == $DefaultData->{Limit}, 'top-level query-style string Offset 0 Limit matches omitted Offset' );
+Assert( $TopLevelStringZeroData->{HasMore} == $DefaultData->{HasMore}, 'top-level query-style string Offset 0 HasMore matches omitted Offset' );
+Assert(
+    CompanyIDs( $TopLevelStringZeroData->{CustomerCompanies} ) eq CompanyIDs( $DefaultData->{CustomerCompanies} ),
+    'top-level query-style string Offset 0 returns the same first page companies as omitted Offset',
+);
+AssertJsonNumber( $TopLevelStringZeroData, 'Offset', 0, 'top-level query-style string Offset 0 serializes Offset as JSON number 0' );
 
 my $NumericZeroResponse = RunOperation( Data => { Limit => 50, Offset => 0 } );
 Assert( !@{ $NumericZeroResponse->{Data}->{Errors} }, 'numeric Offset 0 has no errors' );
 Assert(
     CompanyIDs( $NumericZeroResponse->{Data}->{CustomerCompanies} ) eq CompanyIDs( $DefaultData->{CustomerCompanies} ),
     'numeric Offset 0 returns the same first page companies as omitted Offset',
+);
+
+my $TopLevelNumericZeroResponse = RunOperation( Limit => 50, Offset => 0 );
+Assert( !@{ $TopLevelNumericZeroResponse->{Data}->{Errors} }, 'top-level numeric Offset 0 has no errors' );
+Assert(
+    CompanyIDs( $TopLevelNumericZeroResponse->{Data}->{CustomerCompanies} ) eq CompanyIDs( $DefaultData->{CustomerCompanies} ),
+    'top-level numeric Offset 0 returns the same first page companies as omitted Offset',
 );
 
 my $LimitResponse = RunOperation( Data => { Limit => 250 } );
@@ -322,6 +344,11 @@ my $StringOneResponse = RunOperation( Data => { Limit => 50, Offset => '1' } );
 Assert( $StringOneResponse->{Data}->{Offset} == 1, 'query-style string Offset 1 is accepted' );
 Assert( $StringOneResponse->{Data}->{Count} == 50, 'query-style string Offset 1 returns a full page' );
 Assert( !@{ $StringOneResponse->{Data}->{Errors} }, 'query-style string Offset 1 has no errors' );
+
+my $TopLevelStringOneResponse = RunOperation( Limit => 50, Offset => '1' );
+Assert( $TopLevelStringOneResponse->{Data}->{Offset} == 1, 'top-level query-style string Offset 1 is accepted' );
+Assert( $TopLevelStringOneResponse->{Data}->{Count} == 50, 'top-level query-style string Offset 1 returns a full page' );
+Assert( !@{ $TopLevelStringOneResponse->{Data}->{Errors} }, 'top-level query-style string Offset 1 has no errors' );
 
 my $StringFiftyResponse = RunOperation( Data => { Limit => 50, Offset => '50' } );
 Assert( $StringFiftyResponse->{Data}->{Offset} == 50, 'query-style string Offset 50 is accepted' );

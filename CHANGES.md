@@ -1,5 +1,9 @@
 # ZnunyAgentList Changelog
 
+## 1.6.6 - Unreleased
+
+- Fixed explicit `CustomerCompany::List` `Offset=0` handling after `1.6.5` by separating zero-value parsing success from invalid offset detection.
+
 ## 1.6.5 - Unreleased
 
 - Fixed explicit `Offset=0` handling in `CustomerCompany::List` so query-string zero is accepted as the first page.

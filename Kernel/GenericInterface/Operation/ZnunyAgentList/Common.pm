@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.5';
+use constant PACKAGE_VERSION => '1.6.6';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
@@ -305,21 +305,30 @@ sub PositiveInt {
 sub NonNegativeInt {
     my ( $Class, $Value ) = @_;
 
-    return if !defined $Value || ref $Value;
+    my ( $OK, $Integer ) = $Class->ParseNonNegativeInt($Value);
+    return if !$OK;
+
+    return $Integer;
+}
+
+sub ParseNonNegativeInt {
+    my ( $Class, $Value ) = @_;
+
+    return ( 0, undef ) if !defined $Value || ref $Value;
 
     my $String = "$Value";
     $String =~ s/[\x00-\x1f\x7f]//g;
     $String =~ s/^\s+//;
     $String =~ s/\s+$//;
 
-    return if $String eq q{} || $String !~ m{\A(?:0|[1-9][0-9]*)\z};
-    return 0 if $String eq '0';
+    return ( 0, undef ) if $String eq q{} || $String !~ m{\A(?:0|[1-9][0-9]*)\z};
+    return ( 1, 0 ) if $String eq '0';
 
     my $MaxOffset = CUSTOMER_COMPANY_MAX_OFFSET;
-    return if length $String > length $MaxOffset;
-    return if length $String == length $MaxOffset && $String gt $MaxOffset;
+    return ( 0, undef ) if length $String > length $MaxOffset;
+    return ( 0, undef ) if length $String == length $MaxOffset && $String gt $MaxOffset;
 
-    return 0 + $String;
+    return ( 1, 0 + $String );
 }
 
 sub Boolean {
@@ -993,7 +1002,7 @@ sub CustomerCompanyListData {
     my $Offset = 0;
 
     if ( defined $Param{Offset} ) {
-        my $ParsedOffset = $Class->NonNegativeInt( $Param{Offset} );
+        my ( $OffsetOK, $ParsedOffset ) = $Class->ParseNonNegativeInt( $Param{Offset} );
         return (
             [],
             ['Offset must be a non-negative integer no larger than 2147483647.'],
@@ -1004,7 +1013,7 @@ sub CustomerCompanyListData {
                 Offset     => 0,
                 HasMore    => 0,
             },
-        ) if !defined $ParsedOffset;
+        ) if !$OffsetOK;
 
         $Offset = $ParsedOffset;
     }
