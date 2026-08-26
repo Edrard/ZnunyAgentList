@@ -1,5 +1,9 @@
 # ZnunyAgentList Changelog
 
+## 1.6.7 - Unreleased
+
+- Fixed explicit REST query `CustomerCompany::List` `Offset=0` handling when Znuny REST transport collapses the query value to an empty string.
+
 ## 1.6.6 - Unreleased
 
 - Fixed explicit `CustomerCompany::List` `Offset=0` handling after `1.6.5` by separating zero-value parsing success from invalid offset detection.

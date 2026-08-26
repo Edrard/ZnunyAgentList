@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.6`.
+Current package version: `1.6.7`.
 
 The package provides a controlled REST surface for:
 
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.6",
+  "Version": "1.6.7",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.6",
+  "Version": "1.6.7",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -2296,7 +2296,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.6.opm
+/path/to/output/ZnunyAgentList-1.6.7.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -2308,14 +2308,14 @@ Install:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.6.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.7.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.6.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.7.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

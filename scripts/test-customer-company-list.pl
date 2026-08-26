@@ -271,6 +271,21 @@ Assert(
 );
 AssertJsonNumber( $StringZeroData, 'Offset', 0, 'Data string Offset 0 serializes Offset as JSON number 0' );
 
+my $TransportZeroResponse = RunOperation( Data => { Limit => 50, Offset => q{} } );
+my $TransportZeroData = $TransportZeroResponse->{Data};
+Assert( $TransportZeroResponse->{Success} == 1, 'transport-collapsed Offset 0 reaches final Run success path' );
+Assert( !@{ $TransportZeroData->{Errors} }, 'transport-collapsed Offset 0 has no validation errors' );
+Assert( $TransportZeroData->{Offset} == 0, 'transport-collapsed Offset 0 returns numeric Offset 0' );
+Assert( $TransportZeroData->{Count} == $DefaultData->{Count}, 'transport-collapsed Offset 0 Count matches omitted Offset' );
+Assert( $TransportZeroData->{TotalCount} == $DefaultData->{TotalCount}, 'transport-collapsed Offset 0 TotalCount matches omitted Offset' );
+Assert( $TransportZeroData->{Limit} == $DefaultData->{Limit}, 'transport-collapsed Offset 0 Limit matches omitted Offset' );
+Assert( $TransportZeroData->{HasMore} == $DefaultData->{HasMore}, 'transport-collapsed Offset 0 HasMore matches omitted Offset' );
+Assert(
+    CompanyIDs( $TransportZeroData->{CustomerCompanies} ) eq CompanyIDs( $DefaultData->{CustomerCompanies} ),
+    'transport-collapsed Offset 0 returns the same first page companies as omitted Offset',
+);
+AssertJsonNumber( $TransportZeroData, 'Offset', 0, 'transport-collapsed Offset 0 serializes Offset as JSON number 0' );
+
 my $TopLevelStringZeroResponse = RunOperation( Limit => 50, Offset => '0' );
 my $TopLevelStringZeroData = $TopLevelStringZeroResponse->{Data};
 Assert( $TopLevelStringZeroResponse->{Success} == 1, 'top-level query-style string Offset 0 reaches final Run success path' );

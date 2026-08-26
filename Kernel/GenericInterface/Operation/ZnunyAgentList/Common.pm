@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.6';
+use constant PACKAGE_VERSION => '1.6.7';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
@@ -1002,20 +1002,23 @@ sub CustomerCompanyListData {
     my $Offset = 0;
 
     if ( defined $Param{Offset} ) {
-        my ( $OffsetOK, $ParsedOffset ) = $Class->ParseNonNegativeInt( $Param{Offset} );
-        return (
-            [],
-            ['Offset must be a non-negative integer no larger than 2147483647.'],
-            {
-                Count      => 0,
-                TotalCount => 0,
-                Limit      => 0 + $Limit,
-                Offset     => 0,
-                HasMore    => 0,
-            },
-        ) if !$OffsetOK;
+        my $OffsetValue = "$Param{Offset}";
+        if ( $OffsetValue ne q{} ) {
+            my ( $OffsetOK, $ParsedOffset ) = $Class->ParseNonNegativeInt($OffsetValue);
+            return (
+                [],
+                ['Offset must be a non-negative integer no larger than 2147483647.'],
+                {
+                    Count      => 0,
+                    TotalCount => 0,
+                    Limit      => 0 + $Limit,
+                    Offset     => 0,
+                    HasMore    => 0,
+                },
+            ) if !$OffsetOK;
 
-        $Offset = $ParsedOffset;
+            $Offset = $ParsedOffset;
+        }
     }
 
     my $CustomerCompanyObject = eval { $Kernel::OM->Get('Kernel::System::CustomerCompany') };
