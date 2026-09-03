@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.7';
+use constant PACKAGE_VERSION => '1.6.8';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
@@ -1116,41 +1116,84 @@ sub CustomerUserLookupData {
         return ( undef, ['Login or Email is required.'] );
     }
 
-    my $CustomerUserObject = eval { $Kernel::OM->Get('Kernel::System::CustomerUser') };
-    return ( undef, ['Customer user API is unavailable.'] ) if !$CustomerUserObject;
-
     if ($Login) {
-        my %UserData = eval { $CustomerUserObject->CustomerUserDataGet( User => $Login ) };
-        return ( undef, ['Customer user lookup failed.'] ) if $@;
-        return ( $Class->CustomerUserData(%UserData), [] )
-            if $UserData{UserLogin};
+        my ( $UserData, $LookupErrors ) = $Class->CustomerUserRawByLogin($Login);
+        return ( undef, $LookupErrors ) if @{$LookupErrors || []};
+        return ( $Class->CustomerUserData( %{$UserData} ), [] )
+            if $UserData && $UserData->{UserLogin};
     }
 
     if ($Email) {
-        my %SearchResult = eval {
-            $CustomerUserObject->CustomerSearch(
-                PostMasterSearch => $Email,
-                Valid            => 1,
-                Limit            => 50,
-            );
-        };
-        return ( undef, ['Customer user email lookup failed.'] ) if $@;
+        my ( $Matches, $LookupErrors ) = $Class->CustomerUserRawByEmail($Email);
+        return ( undef, $LookupErrors ) if @{$LookupErrors || []};
 
-        my @Matches;
-        for my $UserLogin ( sort keys %SearchResult ) {
-            my %UserData = eval { $CustomerUserObject->CustomerUserDataGet( User => $UserLogin ) };
-            return ( undef, ['Customer user data lookup failed.'] ) if $@;
-            next if !$UserData{UserLogin};
-            next if lc( $UserData{UserEmail} // q{} ) ne lc $Email;
-
-            push @Matches, $Class->CustomerUserData(%UserData);
-        }
-
-        return ( $Matches[0], [] ) if @Matches == 1;
-        return ( undef, ['Email matches multiple customer users.'] ) if @Matches > 1;
+        return ( $Class->CustomerUserData( %{ $Matches->[0] } ), [] ) if @{$Matches} == 1;
+        return ( undef, ['Email matches multiple customer users.'] ) if @{$Matches} > 1;
     }
 
     return ( undef, [] );
+}
+
+sub CustomerUserRawByLogin {
+    my ( $Class, $Login ) = @_;
+
+    $Login = $Class->SafeString( $Login, 255 );
+    return ( undef, [] ) if $Login eq q{};
+
+    my $CustomerUserObject = eval { $Kernel::OM->Get('Kernel::System::CustomerUser') };
+    return ( undef, ['Customer user API is unavailable.'] ) if !$CustomerUserObject;
+
+    my %UserData = eval { $CustomerUserObject->CustomerUserDataGet( User => $Login ) };
+    return ( undef, ['Customer user lookup failed.'] ) if $@;
+
+    return ( \%UserData, [] ) if $UserData{UserLogin};
+    return ( undef, [] );
+}
+
+sub CustomerUserRawByEmail {
+    my ( $Class, $Email ) = @_;
+
+    $Email = $Class->SafeEmail($Email);
+    return ( [], [] ) if $Email eq q{};
+
+    my $CustomerUserObject = eval { $Kernel::OM->Get('Kernel::System::CustomerUser') };
+    return ( [], ['Customer user API is unavailable.'] ) if !$CustomerUserObject;
+
+    my %SearchResult = eval {
+        $CustomerUserObject->CustomerSearch(
+            PostMasterSearch => $Email,
+            Valid            => 0,
+            Limit            => 50,
+        );
+    };
+    return ( [], ['Customer user email lookup failed.'] ) if $@;
+
+    my @Matches;
+    for my $UserLogin ( sort { lc($a) cmp lc($b) || $a cmp $b } keys %SearchResult ) {
+        my %UserData = eval { $CustomerUserObject->CustomerUserDataGet( User => $UserLogin ) };
+        return ( [], ['Customer user data lookup failed.'] ) if $@;
+        next if !$UserData{UserLogin};
+        next if lc( $UserData{UserEmail} // q{} ) ne lc $Email;
+
+        push @Matches, \%UserData;
+    }
+
+    return ( \@Matches, [] );
+}
+
+sub CustomerUserActiveStatus {
+    my ( $Class, %UserData ) = @_;
+
+    my $ValidID = $UserData{ValidID};
+    return 'disabled' if !defined $ValidID;
+
+    my $ValidObject = eval { $Kernel::OM->Get('Kernel::System::Valid') };
+    return 'disabled' if !$ValidObject;
+
+    my @ValidIDs = eval { $ValidObject->ValidIDsGet() };
+    return 'disabled' if $@;
+
+    return ( grep { defined $_ && $ValidID == $_ } @ValidIDs ) ? 'active' : 'disabled';
 }
 
 sub CustomerUserWriteData {
@@ -1186,9 +1229,13 @@ sub CustomerUserCreateData {
     my $CustomerCompany = $Class->CustomerCompanyLookup( $Data->{UserCustomerID} );
     push @Errors, 'CustomerID was not found or is not valid.' if !$CustomerCompany;
 
-    my ( $Existing, $LookupErrors ) = $Class->CustomerUserLookupData( Login => $Data->{UserLogin} );
-    push @Errors, @{$LookupErrors || []};
-    push @Errors, 'Customer user login already exists.' if $Existing;
+    my ( $ExistingLogin, $LoginErrors ) = $Class->CustomerUserRawByLogin( $Data->{UserLogin} );
+    push @Errors, @{$LoginErrors || []};
+    push @Errors, 'Login is already used by another customer user.' if $ExistingLogin;
+
+    my ( $ExistingEmail, $EmailErrors ) = $Class->CustomerUserRawByEmail( $Data->{UserEmail} );
+    push @Errors, @{$EmailErrors || []};
+    push @Errors, 'Email is already used by another customer user.' if @{$ExistingEmail || []};
 
     return ( undef, \@Errors ) if @Errors;
 
@@ -1235,7 +1282,7 @@ sub CustomerUserUpdateData {
     my $CurrentLogin = $RouteLogin ne q{} ? $RouteLogin : $BodyCurrentLogin;
     return ( undef, ['CurrentLogin is required.'] ) if $CurrentLogin eq q{};
 
-    my ( $Existing, $LookupErrors ) = $Class->CustomerUserLookupData( Login => $CurrentLogin );
+    my ( $Existing, $LookupErrors ) = $Class->CustomerUserRawByLogin($CurrentLogin);
     return ( undef, $LookupErrors ) if @{$LookupErrors || []};
     return ( undef, ['Customer user not found.'] ) if !$Existing;
 
@@ -1265,10 +1312,17 @@ sub CustomerUserUpdateData {
     my $CustomerCompany = $Class->CustomerCompanyLookup($CustomerID);
     push @Errors, 'CustomerID was not found or is not valid.' if !$CustomerCompany;
 
-    if ( lc $NewLogin ne lc $CurrentLogin ) {
-        my ( $Duplicate, $DuplicateErrors ) = $Class->CustomerUserLookupData( Login => $NewLogin );
-        push @Errors, @{$DuplicateErrors || []};
-        push @Errors, 'Customer user login already exists.' if $Duplicate;
+    my ( $DuplicateLogin, $DuplicateLoginErrors ) = $Class->CustomerUserRawByLogin($NewLogin);
+    push @Errors, @{$DuplicateLoginErrors || []};
+    push @Errors, 'Login is already used by another customer user.'
+        if $DuplicateLogin && lc( $DuplicateLogin->{UserLogin} // q{} ) ne lc( $Existing->{UserLogin} // q{} );
+
+    my ( $DuplicateEmail, $DuplicateEmailErrors ) = $Class->CustomerUserRawByEmail($Email);
+    push @Errors, @{$DuplicateEmailErrors || []};
+    for my $Duplicate ( @{ $DuplicateEmail || [] } ) {
+        next if lc( $Duplicate->{UserLogin} // q{} ) eq lc( $Existing->{UserLogin} // q{} );
+        push @Errors, 'Email is already used by another customer user.';
+        last;
     }
 
     return ( undef, \@Errors ) if @Errors;
@@ -1967,11 +2021,12 @@ sub CustomerUserData {
     my ( $Class, %UserData ) = @_;
 
     return {
-        UserLogin      => $UserData{UserLogin}      // q{},
-        UserCustomerID => $UserData{UserCustomerID} // q{},
-        UserFirstname  => $UserData{UserFirstname}  // q{},
-        UserLastname   => $UserData{UserLastname}   // q{},
-        UserEmail      => $UserData{UserEmail}      // q{},
+        Login      => $UserData{UserLogin}      // q{},
+        CustomerID => $UserData{UserCustomerID} // q{},
+        FirstName  => $UserData{UserFirstname}  // q{},
+        LastName   => $UserData{UserLastname}   // q{},
+        Email      => $UserData{UserEmail}      // q{},
+        Status     => $Class->CustomerUserActiveStatus(%UserData),
     };
 }
 

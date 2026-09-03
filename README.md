@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.7`.
+Current package version: `1.6.8`.
 
 The package provides a controlled REST surface for:
 
@@ -217,7 +217,7 @@ operations.
 | `GET` | `/Queue/:QueueID` | `Queue::Get` | Get queue by numeric ID | `QueueID` path parameter | `Queue.Found`, queue metadata |
 | `GET` | `/QueueByName/:Name` | `Queue::Get` | Get queue by name | `Name` path parameter | `Queue.Found`, queue metadata |
 | `GET` | `/Queue/:QueueID/AssignableAgents` | `Queue::AssignableAgents` | List active agents allowed to own tickets in a queue | `QueueID` path parameter | `Success`, `QueueID`, `QueueName`, `Agents[]`, `Errors[]` |
-| `GET` | `/CustomerUser?Search=...&Limit=...` | `CustomerUser::Search` | Search customer users | `Search`, optional `Limit` capped at `50` | `CustomerUsers[]`, optional `Warnings[]` |
+| `GET` | `/CustomerUser?Search=...&Limit=...` | `CustomerUser::Search` | Search customer users, including disabled records | `Search`, optional `Limit` capped at `50` | `CustomerUsers[]`, optional `Warnings[]` |
 | `GET` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Get` | Get one customer user | `CustomerUserLogin` path parameter | `CustomerUser.Found`, safe customer fields |
 | `GET` | `/CustomerUserLookup` | `CustomerUser::Lookup` | Exact customer existence lookup | `Login` and/or `Email` | `Found`, `CustomerUser`, `Errors[]` |
 | `GET` | `/CustomerCompany` | `CustomerCompany::List` | List valid customer company IDs | optional `Search`, `Limit`, `Offset`; default `Limit=50`, max `100`, default `Offset=0` | `CustomerCompanies[]`, `Count`, `TotalCount`, `Limit`, `Offset`, `HasMore`, `Errors[]` |
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.7",
+  "Version": "1.6.8",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.7",
+  "Version": "1.6.8",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -1195,11 +1195,12 @@ logic and exposes only user ID, login, and formatted full name.
 {
   "CustomerUsers": [
     {
-      "UserLogin": "example.customer",
-      "UserCustomerID": "example-customer",
-      "UserFirstname": "Example",
-      "UserLastname": "Customer",
-      "UserEmail": "customer@example.com"
+      "Login": "example.customer",
+      "CustomerID": "example-customer",
+      "FirstName": "Example",
+      "LastName": "Customer",
+      "Email": "customer@example.com",
+      "Status": "active"
     }
   ]
 }
@@ -1211,11 +1212,12 @@ logic and exposes only user ID, login, and formatted full name.
 {
   "CustomerUser": {
     "Found": 1,
-    "UserLogin": "example.customer",
-    "UserCustomerID": "example-customer",
-    "UserFirstname": "Example",
-    "UserLastname": "Customer",
-    "UserEmail": "customer@example.com"
+    "Login": "example.customer",
+    "CustomerID": "example-customer",
+    "FirstName": "Example",
+    "LastName": "Customer",
+    "Email": "customer@example.com",
+    "Status": "active"
   }
 }
 ```
@@ -1237,12 +1239,12 @@ Wildcard-only or too-short customer searches return an empty result and warning:
 {
   "Found": 1,
   "CustomerUser": {
-    "Found": 1,
-    "UserLogin": "example.customer",
-    "UserCustomerID": "example-customer",
-    "UserFirstname": "Example",
-    "UserLastname": "Customer",
-    "UserEmail": "customer@example.com"
+    "Login": "example.customer",
+    "CustomerID": "example-customer",
+    "FirstName": "Example",
+    "LastName": "Customer",
+    "Email": "customer@example.com",
+    "Status": "active"
   },
   "Errors": []
 }
@@ -1251,8 +1253,11 @@ Wildcard-only or too-short customer searches return an empty result and warning:
 `CustomerUser::Get` is the exact login lookup. `CustomerUser::Lookup` exists for
 exact existence checks by `Login` or exact email checks by `Email`; it does not
 use fuzzy customer search semantics, and wildcard-like email values are rejected.
-Email is not treated as unique unless the exact lookup finds exactly one active
-customer user.
+Search and Lookup include active and disabled customer users. Safe customer-user
+objects expose only `Login`, `CustomerID`, `FirstName`, `LastName`, `Email`, and
+`Status`; `Status` is `active` when the Znuny `ValidID` is one of
+`Kernel::System::Valid->ValidIDsGet()` and `disabled` otherwise. Email is not
+treated as unique unless the exact lookup finds exactly one customer user.
 
 Missing login:
 
@@ -1276,7 +1281,7 @@ Duplicate exact email:
 }
 ```
 
-If an email matches multiple active customer users, the lookup returns
+If an email matches multiple customer users, including disabled records, the lookup returns
 `Found: 0` with that error instead of choosing one arbitrarily.
 
 `GET /CustomerCompany?Search=example&Limit=20&Offset=0`
@@ -2203,11 +2208,12 @@ password-reset workflow to receive a new password.
 {
   "Created": 1,
   "CustomerUser": {
-    "UserLogin": "john.doe@example.com",
-    "UserCustomerID": "example-customer",
-    "UserFirstname": "John",
-    "UserLastname": "Doe",
-    "UserEmail": "john.doe@example.com"
+    "Login": "john.doe@example.com",
+    "CustomerID": "example-customer",
+    "FirstName": "John",
+    "LastName": "Doe",
+    "Email": "john.doe@example.com",
+    "Status": "active"
   },
   "Errors": []
 }
@@ -2236,8 +2242,9 @@ passwords.
 Login rename is supported through Znuny's native
 `CustomerUserUpdate(ID => CurrentLogin, UserLogin => Login, ...)` path by
 providing `Login`; if omitted or identical to the path login, the login remains
-unchanged. Duplicate target logins are rejected before calling Znuny's update
-API.
+unchanged. Duplicate target logins and emails are checked against active and
+disabled customer users before calling Znuny's update API. An unchanged login or
+email on the same customer user is allowed.
 
 ### Error Responses
 
@@ -2296,7 +2303,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.7.opm
+/path/to/output/ZnunyAgentList-1.6.8.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -2308,14 +2315,14 @@ Install:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.7.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.8.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.7.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.8.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

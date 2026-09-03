@@ -48,7 +48,7 @@ sub Run {
 
     my %SearchResult = $CustomerUserObject->CustomerSearch(
         Search => $Search,
-        Valid  => 1,
+        Valid  => 0,
         Limit  => $Limit,
     );
 

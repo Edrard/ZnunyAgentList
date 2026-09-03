@@ -40,8 +40,6 @@ sub Run {
         };
     }
 
-    $CustomerUser->{Found} = 1;
-
     return {
         Success => 1,
         Data    => {

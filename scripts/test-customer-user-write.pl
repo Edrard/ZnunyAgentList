@@ -24,6 +24,8 @@ BEGIN {
 }
 
 use Kernel::GenericInterface::Operation::ZnunyAgentList::Common;
+use Kernel::GenericInterface::Operation::CustomerUser::Lookup;
+use Kernel::GenericInterface::Operation::CustomerUser::Search;
 use Kernel::GenericInterface::Operation::CustomerUser::Update;
 
 sub Assert {
@@ -69,13 +71,24 @@ sub Assert {
     sub CustomerSearch {
         my ( $Self, %Param ) = @_;
 
+        my $Valid = defined $Param{Valid} ? $Param{Valid} : 1;
         my $Email = lc( $Param{PostMasterSearch} || q{} );
-        return if $Email eq q{};
+        my $Search = lc( $Param{Search} || q{} );
+        return if $Email eq q{} && $Search eq q{};
 
         my %Result;
         for my $Login ( sort keys %{ $Self->{Users} || {} } ) {
             my $User = $Self->{Users}->{$Login};
-            next if lc( $User->{UserEmail} || q{} ) ne $Email;
+            next if $Valid && ( $User->{ValidID} || 0 ) != 1;
+            if ( $Email ne q{} ) {
+                next if lc( $User->{UserEmail} || q{} ) ne $Email;
+            }
+            if ( $Search ne q{} ) {
+                next if index( lc( $User->{UserLogin} || q{} ), $Search ) < 0
+                    && index( lc( $User->{UserEmail} || q{} ), $Search ) < 0
+                    && index( lc( $User->{UserFirstname} || q{} ), $Search ) < 0
+                    && index( lc( $User->{UserLastname} || q{} ), $Search ) < 0;
+            }
             $Result{ $User->{UserLogin} } = $User->{UserFirstname} . q{ } . $User->{UserLastname};
         }
 
@@ -86,6 +99,7 @@ sub Assert {
     sub CustomerUserAdd {
         my ( $Self, %Param ) = @_;
 
+        $Self->{AddCount}++;
         $Self->{LastAdd} = { %Param };
         $Self->{Users}->{ lc $Param{UserLogin} } = {
             UserLogin      => $Param{UserLogin},
@@ -93,6 +107,7 @@ sub Assert {
             UserFirstname  => $Param{UserFirstname},
             UserLastname   => $Param{UserLastname},
             UserEmail      => $Param{UserEmail},
+            ValidID        => $Param{ValidID},
         };
         return 1;
     }
@@ -100,6 +115,7 @@ sub Assert {
     sub CustomerUserUpdate {
         my ( $Self, %Param ) = @_;
 
+        $Self->{UpdateCount}++;
         $Self->{LastUpdate} = { %Param };
         delete $Self->{Users}->{ lc $Param{ID} };
         $Self->{Users}->{ lc $Param{UserLogin} } = {
@@ -108,6 +124,7 @@ sub Assert {
             UserFirstname  => $Param{UserFirstname},
             UserLastname   => $Param{UserLastname},
             UserEmail      => $Param{UserEmail},
+            ValidID        => $Param{ValidID},
         };
         return 1;
     }
@@ -120,6 +137,14 @@ sub Assert {
         return $Self->{NextPassword} if exists $Self->{NextPassword};
 
         return 'A' x 24;
+    }
+}
+
+{
+    package Test::Valid;
+
+    sub ValidIDsGet {
+        return (1);
     }
 }
 
@@ -163,6 +188,7 @@ my $CustomerUserObject = bless {
             UserFirstname  => 'Existing',
             UserLastname   => 'Customer',
             UserEmail      => 'existing@example.com',
+            ValidID        => 1,
         },
         'duplicate@example.com' => {
             UserLogin      => 'duplicate@example.com',
@@ -170,6 +196,39 @@ my $CustomerUserObject = bless {
             UserFirstname  => 'Duplicate',
             UserLastname   => 'Customer',
             UserEmail      => 'duplicate@example.com',
+            ValidID        => 1,
+        },
+        'disabled@example.com' => {
+            UserLogin      => 'disabled@example.com',
+            UserCustomerID => 'example-customer',
+            UserFirstname  => 'Disabled',
+            UserLastname   => 'Customer',
+            UserEmail      => 'disabled@example.com',
+            ValidID        => 2,
+        },
+        'disabled-email-owner@example.com' => {
+            UserLogin      => 'disabled-email-owner@example.com',
+            UserCustomerID => 'example-customer',
+            UserFirstname  => 'DisabledEmail',
+            UserLastname   => 'Customer',
+            UserEmail      => 'disabled-collision@example.com',
+            ValidID        => 2,
+        },
+        'ambiguous-one@example.com' => {
+            UserLogin      => 'ambiguous-one@example.com',
+            UserCustomerID => 'example-customer',
+            UserFirstname  => 'Ambiguous',
+            UserLastname   => 'One',
+            UserEmail      => 'ambiguous@example.com',
+            ValidID        => 1,
+        },
+        'ambiguous-two@example.com' => {
+            UserLogin      => 'ambiguous-two@example.com',
+            UserCustomerID => 'example-customer',
+            UserFirstname  => 'Ambiguous',
+            UserLastname   => 'Two',
+            UserEmail      => 'ambiguous@example.com',
+            ValidID        => 2,
         },
     },
 }, 'Test::CustomerUser';
@@ -178,6 +237,7 @@ my $OM = bless {
     'Kernel::System::CustomerUser'    => $CustomerUserObject,
     'Kernel::Config'                  => bless( {}, 'Test::Config' ),
     'Kernel::System::Group'           => bless( {}, 'Test::Group' ),
+    'Kernel::System::Valid'           => bless( {}, 'Test::Valid' ),
 }, 'Test::OM';
 
 {
@@ -186,14 +246,69 @@ my $OM = bless {
     my ( $ByLogin, $ByLoginErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLookupData(
         Login => 'existing@example.com',
     );
-    Assert( $ByLogin->{UserLogin} eq 'existing@example.com', 'lookup by login must be exact' );
+    Assert( $ByLogin->{Login} eq 'existing@example.com', 'lookup by login must be exact' );
+    Assert( $ByLogin->{Status} eq 'active', 'lookup by active login returns active status' );
+    Assert(
+        join( q{,}, sort keys %{$ByLogin} ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
+        'lookup response exposes exactly the public customer user fields',
+    );
     Assert( !@{$ByLoginErrors}, 'lookup by login must not return errors' );
+
+    my ( $DisabledByLogin, $DisabledByLoginErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLookupData(
+        Login => 'disabled@example.com',
+    );
+    Assert( $DisabledByLogin->{Login} eq 'disabled@example.com', 'lookup by disabled login must find disabled user' );
+    Assert( $DisabledByLogin->{Status} eq 'disabled', 'lookup by disabled login returns disabled status' );
+    Assert( !@{$DisabledByLoginErrors}, 'lookup by disabled login must not return errors' );
 
     my ( $ByEmail, $ByEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLookupData(
         Email => 'existing@example.com',
     );
-    Assert( $ByEmail->{UserEmail} eq 'existing@example.com', 'lookup by email must cross-check exact email' );
+    Assert( $ByEmail->{Email} eq 'existing@example.com', 'lookup by active email must cross-check exact email' );
+    Assert( $ByEmail->{Status} eq 'active', 'lookup by active email returns active status' );
     Assert( !@{$ByEmailErrors}, 'lookup by email must not return errors' );
+
+    my ( $DisabledByEmail, $DisabledByEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLookupData(
+        Email => 'disabled@example.com',
+    );
+    Assert( $DisabledByEmail->{Email} eq 'disabled@example.com', 'lookup by disabled email must find disabled user' );
+    Assert( $DisabledByEmail->{Status} eq 'disabled', 'lookup by disabled email returns disabled status' );
+    Assert( !@{$DisabledByEmailErrors}, 'lookup by disabled email must not return errors' );
+
+    my ( $AmbiguousEmail, $AmbiguousEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLookupData(
+        Email => 'ambiguous@example.com',
+    );
+    Assert( !$AmbiguousEmail, 'lookup by ambiguous email must not choose an arbitrary user' );
+    Assert( $AmbiguousEmailErrors->[0] eq 'Email matches multiple customer users.', 'ambiguous email must return deterministic error' );
+
+    my $LookupOperation = bless {}, 'Kernel::GenericInterface::Operation::CustomerUser::Lookup';
+    my $LookupResponse = $LookupOperation->Run(
+        Data => {
+            Login => 'disabled@example.com',
+        },
+    );
+    Assert( $LookupResponse->{Data}->{Found} == 1, 'Lookup operation finds disabled users' );
+    Assert(
+        join( q{,}, sort keys %{ $LookupResponse->{Data}->{CustomerUser} } ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
+        'Lookup operation CustomerUser object exposes exactly public fields',
+    );
+    Assert( $LookupResponse->{Data}->{CustomerUser}->{Status} eq 'disabled', 'Lookup operation returns disabled status' );
+
+    my $SearchOperation = bless {}, 'Kernel::GenericInterface::Operation::CustomerUser::Search';
+    my $SearchResponse = $SearchOperation->Run(
+        Data => {
+            Search => 'disabled',
+            Limit  => 10,
+        },
+    );
+    Assert(
+        grep { $_->{Login} eq 'disabled@example.com' && $_->{Status} eq 'disabled' } @{ $SearchResponse->{Data}->{CustomerUsers} },
+        'Search operation includes disabled customer users',
+    );
+    Assert(
+        join( q{,}, sort keys %{ $SearchResponse->{Data}->{CustomerUsers}->[0] } ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
+        'Search operation CustomerUser items expose exactly public fields',
+    );
 
     my ( $WildcardEmail, $WildcardEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLookupData(
         Email => '*@example.com',
@@ -232,7 +347,44 @@ my $OM = bless {
         UserID     => 2,
     );
     Assert( !$DuplicateCreate, 'duplicate login create must fail' );
-    Assert( grep { $_ eq 'Customer user login already exists.' } @{$DuplicateErrors}, 'duplicate login error must be present' );
+    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateErrors}, 'duplicate active login error must be present' );
+    Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate active login must prevent CustomerUserAdd' );
+
+    my ( $DuplicateDisabledLoginCreate, $DuplicateDisabledLoginErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
+        FirstName  => 'Existing',
+        LastName   => 'Customer',
+        Login      => 'disabled@example.com',
+        Email      => 'unique-disabled-login@example.com',
+        CustomerID => 'example-customer',
+        UserID     => 2,
+    );
+    Assert( !$DuplicateDisabledLoginCreate, 'duplicate disabled login create must fail' );
+    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateDisabledLoginErrors}, 'duplicate disabled login error must be present' );
+    Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate disabled login must prevent CustomerUserAdd' );
+
+    my ( $DuplicateActiveEmailCreate, $DuplicateActiveEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
+        FirstName  => 'Email',
+        LastName   => 'Customer',
+        Login      => 'unique-active-email@example.com',
+        Email      => 'existing@example.com',
+        CustomerID => 'example-customer',
+        UserID     => 2,
+    );
+    Assert( !$DuplicateActiveEmailCreate, 'duplicate active email create must fail' );
+    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateActiveEmailErrors}, 'duplicate active email error must be present' );
+    Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate active email must prevent CustomerUserAdd' );
+
+    my ( $DuplicateDisabledEmailCreate, $DuplicateDisabledEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
+        FirstName  => 'Email',
+        LastName   => 'Customer',
+        Login      => 'unique-disabled-email@example.com',
+        Email      => 'disabled-collision@example.com',
+        CustomerID => 'example-customer',
+        UserID     => 2,
+    );
+    Assert( !$DuplicateDisabledEmailCreate, 'duplicate disabled email create must fail' );
+    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateDisabledEmailErrors}, 'duplicate disabled email error must be present' );
+    Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate disabled email must prevent CustomerUserAdd' );
 
     my ( $PasswordCreate, $PasswordCreateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
         FirstName        => 'Updated',
@@ -281,6 +433,8 @@ my $OM = bless {
     Assert( exists $CustomerUserObject->{LastAdd}->{UserPassword}, 'create must pass generated password to native CustomerUserAdd' );
     Assert( length $CustomerUserObject->{LastAdd}->{UserPassword} >= 24, 'generated password passed to CustomerUserAdd must be non-empty and long enough' );
     Assert( !$Created->{UserPassword} && !$Created->{Password}, 'create response must not return password' );
+    Assert( $Created->{Login} eq 'updated@example.com', 'valid create returns public Login' );
+    Assert( $Created->{Status} eq 'active', 'valid create returns active status' );
     Assert( !@{$CreateErrors}, 'valid create must not return errors' );
 
     delete $CustomerUserObject->{LastAdd};
@@ -319,10 +473,10 @@ my $OM = bless {
     Assert( !exists $CustomerUserObject->{LastUpdate}->{UserPassword}, 'omitted password must remain unchanged' );
     Assert( !$RouteOnlyResponse->{Data}->{CustomerUser}->{UserPassword} && !$RouteOnlyResponse->{Data}->{CustomerUser}->{Password}, 'update response must not return password' );
     Assert(
-        join( q{,}, sort keys %{ $RouteOnlyResponse->{Data}->{CustomerUser} } ) eq 'UserCustomerID,UserEmail,UserFirstname,UserLastname,UserLogin',
+        join( q{,}, sort keys %{ $RouteOnlyResponse->{Data}->{CustomerUser} } ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
         'update response must expose only safe customer user fields',
     );
-    Assert( $RouteOnlyResponse->{Data}->{CustomerUser}->{UserLastname} eq 'RuntimePatched', 'update response must return actual updated user' );
+    Assert( $RouteOnlyResponse->{Data}->{CustomerUser}->{LastName} eq 'RuntimePatched', 'update response must return actual updated user' );
 
     my $MismatchResponse = $Operation->Run(
         CustomerUserLogin => 'existing@example.com',
@@ -343,7 +497,44 @@ my $OM = bless {
         UserID            => 2,
     );
     Assert( !$DuplicateUpdate, 'duplicate target login update must fail' );
-    Assert( grep { $_ eq 'Customer user login already exists.' } @{$DuplicateUpdateErrors}, 'duplicate target login error must be present' );
+    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateUpdateErrors}, 'duplicate active target login error must be present' );
+
+    delete $CustomerUserObject->{LastUpdate};
+    my ( $DuplicateDisabledLoginUpdate, $DuplicateDisabledLoginUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
+        CustomerUserLogin => 'existing@example.com',
+        Login             => 'disabled@example.com',
+        UserID            => 2,
+    );
+    Assert( !$DuplicateDisabledLoginUpdate, 'duplicate disabled target login update must fail' );
+    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateDisabledLoginUpdateErrors}, 'duplicate disabled target login error must be present' );
+    Assert( !exists $CustomerUserObject->{LastUpdate}, 'duplicate disabled target login must prevent CustomerUserUpdate' );
+
+    my ( $DuplicateActiveEmailUpdate, $DuplicateActiveEmailUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
+        CustomerUserLogin => 'existing@example.com',
+        Email             => 'duplicate@example.com',
+        UserID            => 2,
+    );
+    Assert( !$DuplicateActiveEmailUpdate, 'duplicate active target email update must fail' );
+    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateActiveEmailUpdateErrors}, 'duplicate active target email error must be present' );
+    Assert( !exists $CustomerUserObject->{LastUpdate}, 'duplicate active target email must prevent CustomerUserUpdate' );
+
+    my ( $DuplicateDisabledEmailUpdate, $DuplicateDisabledEmailUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
+        CustomerUserLogin => 'existing@example.com',
+        Email             => 'disabled-collision@example.com',
+        UserID            => 2,
+    );
+    Assert( !$DuplicateDisabledEmailUpdate, 'duplicate disabled target email update must fail' );
+    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateDisabledEmailUpdateErrors}, 'duplicate disabled target email error must be present' );
+    Assert( !exists $CustomerUserObject->{LastUpdate}, 'duplicate disabled target email must prevent CustomerUserUpdate' );
+
+    my ( $UnchangedIdentity, $UnchangedIdentityErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
+        CustomerUserLogin => 'existing@example.com',
+        Login             => 'existing@example.com',
+        Email             => 'existing@example.com',
+        UserID            => 2,
+    );
+    Assert( $UnchangedIdentity, 'unchanged Login and Email must not conflict with the same user' );
+    Assert( !@{$UnchangedIdentityErrors}, 'unchanged Login and Email must not return uniqueness errors' );
 
     my ( $NotFoundUpdate, $NotFoundUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
         CustomerUserLogin => 'missing@example.com',
@@ -364,7 +555,7 @@ my $OM = bless {
     Assert( $CustomerUserObject->{LastUpdate}->{UserFirstname} eq 'Existing', 'rename must preserve unspecified first name' );
     Assert( $CustomerUserObject->{LastUpdate}->{UserLastname} eq 'RuntimePatched', 'rename must preserve prior last name' );
     Assert( $CustomerUserObject->{LastUpdate}->{UserEmail} eq 'existing@example.com', 'rename must preserve valid stored email' );
-    Assert( $Renamed->{UserLogin} eq 'renamed@example.com', 'rename response must return actual renamed user' );
+    Assert( $Renamed->{Login} eq 'renamed@example.com', 'rename response must return actual renamed user' );
     Assert( !@{$RenameErrors}, 'valid rename must not return errors' );
 
     my ( $Companies, $CompanyErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerCompanyListData(

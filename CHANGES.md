@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.6.8 - Unreleased
+
+- Included disabled customer users in `CustomerUser::Search` and exact `CustomerUser::Lookup` results with an explicit `Status` field.
+- Hardened customer-user create/update uniqueness checks against active and disabled login/email collisions before calling Znuny write APIs.
+- Standardized safe customer-user response fields to `Login`, `CustomerID`, `FirstName`, `LastName`, `Email`, and `Status`.
+
 ## 1.6.7 - 2026-08-26
 
 - Fixed explicit REST query `CustomerCompany::List` `Offset=0` handling when Znuny REST transport collapses the query value to an empty string.

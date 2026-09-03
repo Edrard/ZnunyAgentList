@@ -63,7 +63,7 @@ require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 SOPM="$ROOT/ZnunyAgentList.sopm"
 CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 WEBSERVICE_YAML="$ROOT/examples/webservices/AdvancedZnunyAgentListREST.yml"
-EXPECTED_VERSION='1.6.7'
+EXPECTED_VERSION='1.6.8'
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'
@@ -558,6 +558,19 @@ else
     fail 'Customer user write helper checks were not found'
 fi
 
+if grep -Fq 'CustomerUserRawByLogin' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerUserRawByEmail' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerUserActiveStatus' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'ValidIDsGet' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'Valid            => 0' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'Valid  => 0' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Search.pm" \
+    && grep -Fq 'Login is already used by another customer user.' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'Email is already used by another customer user.' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm"; then
+    pass 'Customer user lookup/search include disabled users and enforce login/email uniqueness before writes'
+else
+    fail 'Customer user disabled lookup/search or uniqueness checks were not found'
+fi
+
 if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'POST /CustomerUser' "$ROOT/README.md" \
     && grep -Fq 'PATCH /CustomerUser/:CustomerUserLogin' "$ROOT/README.md" \
@@ -569,6 +582,9 @@ if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'Password input is not supported' "$ROOT/README.md" \
     && grep -Fq 'generates a private random password' "$ROOT/README.md" \
     && grep -Fq 'password-reset workflow' "$ROOT/README.md" \
+    && grep -Fq 'Search and Lookup include active and disabled customer users' "$ROOT/README.md" \
+    && grep -Fq 'Login`, `CustomerID`, `FirstName`, `LastName`, `Email`, and' "$ROOT/README.md" \
+    && grep -Fq '`Status` is `active`' "$ROOT/README.md" \
     && grep -Fq 'base64' "$ROOT/README.md" \
     && grep -Fq 'image/webp' "$ROOT/README.md"; then
     pass 'README documents customer/user company and inline attachment contracts'
