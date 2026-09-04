@@ -1,6 +1,6 @@
 # ZnunyAgentList Changelog
 
-## 1.6.11 - Unreleased
+## 1.6.11 - 2026-09-04
 
 - Added optional `ReconcileTickets=1` support to `CustomerUser::Create` for correcting existing ticket `CustomerID` values after native customer-user creation.
 - Kept create reconciliation opt-in and limited to standard Znuny `TicketSearch()`, `TicketGet()`, and `TicketCustomerSet()` APIs without changing ticket `CustomerUserID`.
