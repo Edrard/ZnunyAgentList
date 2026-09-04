@@ -2207,14 +2207,17 @@ safe ticket metadata or update the local cache.
   "LastName": "Doe",
   "Login": "john.doe@example.com",
   "Email": "john.doe@example.com",
-  "CustomerID": "example-customer",
-  "ReconcileTickets": 1
+  "CustomerID": "example-customer"
 }
 ```
 
 `FirstName`, `LastName`, `Login`, `Email`, and `CustomerID` are required.
 `CustomerID` is the Znuny value shown as `Company ID` in the agent UI and must
 exist as a valid customer company.
+
+Normal Create uses Znuny's native CustomerUser API and preserves its standard
+Create behavior. Native Znuny Create creates the customer user but does not
+modify or reconcile historical tickets.
 
 Login and email uniqueness is enforced across active and disabled customer
 users before Znuny's write API is called. A uniqueness validation failure returns
@@ -2229,22 +2232,80 @@ internally and never returns it. `UserPassword` is explicitly rejected with
 customer who needs Customer Portal access must use the normal administrative or
 password-reset workflow to receive a new password.
 
-`ReconcileTickets` is a Create-only opt-in flag. Omitted or `0` preserves native
-Znuny CustomerUser create behavior and performs no ticket scan. Existing clients
-do not need to send `ReconcileTickets`; omission is equivalent to `0`, so older
-`POST /CustomerUser` integrations remain backward compatible. `1` runs a
-post-create reconciliation for existing tickets whose `CustomerUserID` exactly
-matches the newly created login, including archived and non-archived tickets.
-This enhancement exists because native Znuny CustomerUser create does not
-reconcile those historical ticket records by itself.
+Normal Create response:
+
+```json
+{
+  "Created": 1,
+  "CustomerUser": {
+    "Login": "john.doe@example.com",
+    "CustomerID": "example-customer",
+    "FirstName": "John",
+    "LastName": "Doe",
+    "Email": "john.doe@example.com",
+    "Status": "active",
+    "UserLogin": "john.doe@example.com",
+    "UserEmail": "john.doe@example.com",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "John",
+    "UserLastname": "Doe"
+  },
+  "Errors": []
+}
+```
+
+#### Create With Historical Ticket Reconciliation
+
+`ReconcileTickets` is a Create-only ZnunyAgentList enhancement layered on top of
+successful native Create.
+
+| `ReconcileTickets` value | Behavior |
+| --- | --- |
+| omitted | Disabled; equivalent to `0`. No ticket search is performed and no `ReconcileTickets` response object is returned. |
+| `0` | Disabled. No ticket search is performed and no `ReconcileTickets` response object is returned. |
+| `1` | Enabled after successful customer-user creation. |
+| any other explicit value | Validation error before customer-user creation. |
+
+Existing integrations do not need to send `ReconcileTickets`; omitted and `0`
+preserve backward-compatible normal Create behavior.
+
+Request:
+
+```json
+{
+  "FirstName": "John",
+  "LastName": "Doe",
+  "Login": "john.doe@example.com",
+  "Email": "john.doe@example.com",
+  "CustomerID": "example-customer",
+  "ReconcileTickets": 1
+}
+```
+
+With `ReconcileTickets=1`, reconciliation searches up to 100,000 exact matching
+tickets per Create request, including archived and non-archived tickets. The
+match is exact: ticket `CustomerUserID` must equal the newly created customer
+user `Login`.
 
 The reconciliation updates only ticket `CustomerID` through Znuny's standard
 ticket customer API when the ticket still points to a different customer ID.
 Ticket `CustomerUserID` is preserved. Already-correct tickets are skipped. If
 one ticket update fails after the CustomerUser was created, the CustomerUser is
 not rolled back; `Created` remains `1` and the reconciliation error is reported
-separately. `CustomerUser::Update` is not affected and continues to use native
-Znuny update/event behavior.
+separately.
+
+Reconciliation statistics:
+
+| Field | Meaning |
+| --- | --- |
+| `Requested` | `1` when reconciliation was explicitly requested. |
+| `Found` | Number of exact matching tickets found, up to the 100,000-ticket search limit. |
+| `Changed` | Tickets whose `CustomerID` was updated. |
+| `Skipped` | Tickets already using the new `CustomerID`. |
+| `Failed` | Tickets that could not be read or updated. |
+| `Errors` | Per-ticket or reconciliation-level error details. |
+
+Response:
 
 ```json
 {
@@ -2306,12 +2367,24 @@ performs no native customer-user write.
 
 Update intentionally preserves Znuny's native CustomerUserUpdate behavior. Znuny
 may reconcile ticket customer data through its native CustomerUserUpdate event,
-but only for tickets matching the old customer identity pair: old
-`CustomerUserID` / login and old `CustomerID`. For those matching tickets,
-changing the login can update ticket `CustomerUserID`, and changing `CustomerID`
-can update ticket `CustomerID`. Tickets that do not match the old pair are left
-untouched by the native mechanism. The plugin adds no custom reconciliation
-logic to `CustomerUser::Update`; `ReconcileTickets` belongs only to Create.
+but only for tickets matching the old customer identity pair:
+
+```text
+Ticket.CustomerUserID == old CustomerUser Login
+AND
+Ticket.CustomerID     == old CustomerUser CustomerID
+```
+
+| CustomerUser change | Native behavior for matching tickets |
+| --- | --- |
+| Login changed | Ticket `CustomerUserID` can change to the new login; `CustomerID` remains unchanged if the CustomerUser `CustomerID` itself was not changed. |
+| CustomerID changed | Ticket `CustomerID` can change to the new CustomerID; `CustomerUserID` remains unchanged if the CustomerUser login itself was not changed. |
+| Login and CustomerID changed | Both ticket customer fields can change for matching tickets. |
+| Ticket does not match the old Login + old CustomerID pair | Native mechanism leaves the ticket untouched. |
+
+`ReconcileTickets` is not supported on Update. The plugin adds no custom ticket
+reconciliation logic to `PATCH /CustomerUser/:CustomerUserLogin`; Update
+continues to use native Znuny event semantics.
 
 ### Error Responses
 
@@ -2473,6 +2546,7 @@ Kernel/GenericInterface/Operation/ZnunyAgentList/Health.pm
 Kernel/GenericInterface/Operation/User/*.pm
 Kernel/GenericInterface/Operation/Queue/*.pm
 Kernel/GenericInterface/Operation/CustomerUser/*.pm
+Kernel/GenericInterface/Operation/CustomerCompany/*.pm
 Kernel/GenericInterface/Operation/Ticket/*.pm
 ```
 
