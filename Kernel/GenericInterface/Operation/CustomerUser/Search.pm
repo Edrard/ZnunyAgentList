@@ -62,7 +62,7 @@ sub Run {
 
         next if !$UserData{UserLogin};
 
-        push @CustomerUsers, Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserData(%UserData);
+        push @CustomerUsers, Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLegacyData(%UserData);
     }
 
     return {

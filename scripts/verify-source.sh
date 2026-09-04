@@ -63,7 +63,7 @@ require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 SOPM="$ROOT/ZnunyAgentList.sopm"
 CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 WEBSERVICE_YAML="$ROOT/examples/webservices/AdvancedZnunyAgentListREST.yml"
-EXPECTED_VERSION='1.6.9'
+EXPECTED_VERSION='1.6.10'
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'
@@ -561,6 +561,8 @@ fi
 if grep -Fq 'CustomerUserRawByLogin' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq 'CustomerUserRawByEmail' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq 'CustomerUserActiveStatus' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerUserLegacyData' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerUserLegacyData(%UserData)' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Search.pm" \
     && grep -Fq 'ValidIDsGet' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq 'Valid            => 0' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq 'Valid  => 0' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Search.pm" \
@@ -583,7 +585,10 @@ if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'generates a private random password' "$ROOT/README.md" \
     && grep -Fq 'password-reset workflow' "$ROOT/README.md" \
     && grep -Fq 'Search and Lookup include active and disabled customer users' "$ROOT/README.md" \
-    && grep -Fq 'Login`, `CustomerID`, `FirstName`, `LastName`, `Email`, and' "$ROOT/README.md" \
+    && grep -Fq 'Search preserves' "$ROOT/README.md" \
+    && grep -Fq 'UserLogin`, `UserEmail`, `UserCustomerID`, `UserFirstname`' "$ROOT/README.md" \
+    && grep -Fq 'Lookup returns canonical `Login`' "$ROOT/README.md" \
+    && grep -Fq 'aliases for backward compatibility' "$ROOT/README.md" \
     && grep -Fq '`Status` is `active`' "$ROOT/README.md" \
     && grep -Fq 'base64' "$ROOT/README.md" \
     && grep -Fq 'image/webp' "$ROOT/README.md"; then

@@ -1,5 +1,11 @@
 # ZnunyAgentList Changelog
 
+## 1.6.10 - Unreleased
+
+- Restored backward-compatible `CustomerUser::Search` response fields `UserLogin`, `UserEmail`, `UserCustomerID`, `UserFirstname`, and `UserLastname` while keeping additive `Status` metadata.
+- Retained legacy CustomerUser aliases alongside canonical fields for exact lookup and write responses.
+- Documented CustomerUser compatibility, uniqueness, disabled-user lookup/search, and password/authentication behavior for existing consumers.
+
 ## 1.6.9 - 2026-09-04
 
 - Included disabled customer users in `CustomerUser::Search` and exact `CustomerUser::Lookup` results.

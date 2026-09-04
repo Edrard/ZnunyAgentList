@@ -241,6 +241,9 @@ my $OM = bless {
     'Kernel::System::Valid'           => bless( {}, 'Test::Valid' ),
 }, 'Test::OM';
 
+my $LookupKeys = 'CustomerID,Email,FirstName,LastName,Login,Status,UserCustomerID,UserEmail,UserFirstname,UserLastname,UserLogin';
+my $SearchKeys = 'Status,UserCustomerID,UserEmail,UserFirstname,UserLastname,UserLogin';
+
 {
     local $Kernel::OM = $OM;
 
@@ -248,10 +251,15 @@ my $OM = bless {
         Login => 'existing@example.com',
     );
     Assert( $ByLogin->{Login} eq 'existing@example.com', 'lookup by login must be exact' );
+    Assert( $ByLogin->{UserLogin} eq 'existing@example.com', 'lookup by login must retain legacy UserLogin alias' );
+    Assert( $ByLogin->{UserEmail} eq 'existing@example.com', 'lookup by login must retain legacy UserEmail alias' );
+    Assert( $ByLogin->{UserCustomerID} eq 'example-customer', 'lookup by login must retain legacy UserCustomerID alias' );
+    Assert( $ByLogin->{UserFirstname} eq 'Existing', 'lookup by login must retain legacy UserFirstname alias' );
+    Assert( $ByLogin->{UserLastname} eq 'Customer', 'lookup by login must retain legacy UserLastname alias' );
     Assert( $ByLogin->{Status} eq 'active', 'lookup by active login returns active status' );
     Assert(
-        join( q{,}, sort keys %{$ByLogin} ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
-        'lookup response exposes exactly the public customer user fields',
+        join( q{,}, sort keys %{$ByLogin} ) eq $LookupKeys,
+        'lookup response exposes canonical fields and legacy aliases',
     );
     Assert( !@{$ByLoginErrors}, 'lookup by login must not return errors' );
 
@@ -259,6 +267,7 @@ my $OM = bless {
         Login => 'disabled@example.com',
     );
     Assert( $DisabledByLogin->{Login} eq 'disabled@example.com', 'lookup by disabled login must find disabled user' );
+    Assert( $DisabledByLogin->{UserLogin} eq 'disabled@example.com', 'lookup by disabled login must retain legacy UserLogin alias' );
     Assert( $DisabledByLogin->{Status} eq 'disabled', 'lookup by disabled login returns disabled status' );
     Assert( !@{$DisabledByLoginErrors}, 'lookup by disabled login must not return errors' );
 
@@ -266,6 +275,7 @@ my $OM = bless {
         Email => 'existing@example.com',
     );
     Assert( $ByEmail->{Email} eq 'existing@example.com', 'lookup by active email must cross-check exact email' );
+    Assert( $ByEmail->{UserEmail} eq 'existing@example.com', 'lookup by active email must retain legacy UserEmail alias' );
     Assert( $ByEmail->{Status} eq 'active', 'lookup by active email returns active status' );
     Assert( !@{$ByEmailErrors}, 'lookup by email must not return errors' );
 
@@ -273,6 +283,7 @@ my $OM = bless {
         Email => 'disabled@example.com',
     );
     Assert( $DisabledByEmail->{Email} eq 'disabled@example.com', 'lookup by disabled email must find disabled user' );
+    Assert( $DisabledByEmail->{UserEmail} eq 'disabled@example.com', 'lookup by disabled email must retain legacy UserEmail alias' );
     Assert( $DisabledByEmail->{Status} eq 'disabled', 'lookup by disabled email returns disabled status' );
     Assert( !@{$DisabledByEmailErrors}, 'lookup by disabled email must not return errors' );
 
@@ -289,11 +300,14 @@ my $OM = bless {
         },
     );
     Assert( $LookupResponse->{Data}->{Found} == 1, 'Lookup operation finds disabled users' );
+    Assert( exists $LookupResponse->{Data}->{Errors}, 'Lookup operation preserves Errors envelope field' );
+    Assert( exists $LookupResponse->{Data}->{CustomerUser}, 'Lookup operation preserves CustomerUser envelope field' );
     Assert(
-        join( q{,}, sort keys %{ $LookupResponse->{Data}->{CustomerUser} } ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
-        'Lookup operation CustomerUser object exposes exactly public fields',
+        join( q{,}, sort keys %{ $LookupResponse->{Data}->{CustomerUser} } ) eq $LookupKeys,
+        'Lookup operation CustomerUser object exposes canonical fields and legacy aliases',
     );
     Assert( $LookupResponse->{Data}->{CustomerUser}->{Status} eq 'disabled', 'Lookup operation returns disabled status' );
+    Assert( $LookupResponse->{Data}->{CustomerUser}->{UserLogin} eq 'disabled@example.com', 'Lookup operation retains legacy UserLogin alias' );
 
     my $SearchOperation = bless {}, 'Kernel::GenericInterface::Operation::CustomerUser::Search';
     my $SearchResponse = $SearchOperation->Run(
@@ -303,13 +317,22 @@ my $OM = bless {
         },
     );
     Assert(
-        scalar( grep { $_->{Login} eq 'disabled@example.com' && $_->{Status} eq 'disabled' } @{ $SearchResponse->{Data}->{CustomerUsers} } ),
+        exists $SearchResponse->{Success} && exists $SearchResponse->{Data} && exists $SearchResponse->{Data}->{CustomerUsers},
+        'Search operation preserves Success/Data/CustomerUsers envelope',
+    );
+    Assert(
+        scalar( grep { $_->{UserLogin} eq 'disabled@example.com' && $_->{Status} eq 'disabled' } @{ $SearchResponse->{Data}->{CustomerUsers} } ),
         'Search operation includes disabled customer users',
     );
     Assert(
-        join( q{,}, sort keys %{ $SearchResponse->{Data}->{CustomerUsers}->[0] } ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
-        'Search operation CustomerUser items expose exactly public fields',
+        join( q{,}, sort keys %{ $SearchResponse->{Data}->{CustomerUsers}->[0] } ) eq $SearchKeys,
+        'Search operation CustomerUser items preserve legacy public fields plus Status',
     );
+    Assert( !exists $SearchResponse->{Data}->{CustomerUsers}->[0]->{Login}, 'Search operation must not replace legacy UserLogin with canonical Login' );
+    Assert( exists $SearchResponse->{Data}->{CustomerUsers}->[0]->{UserEmail}, 'Search operation must retain legacy UserEmail' );
+    Assert( exists $SearchResponse->{Data}->{CustomerUsers}->[0]->{UserCustomerID}, 'Search operation must retain legacy UserCustomerID' );
+    Assert( exists $SearchResponse->{Data}->{CustomerUsers}->[0]->{UserFirstname}, 'Search operation must retain legacy UserFirstname' );
+    Assert( exists $SearchResponse->{Data}->{CustomerUsers}->[0]->{UserLastname}, 'Search operation must retain legacy UserLastname' );
 
     my ( $WildcardEmail, $WildcardEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserLookupData(
         Email => '*@example.com',
@@ -495,6 +518,7 @@ my $OM = bless {
     Assert( length $CustomerUserObject->{LastAdd}->{UserPassword} >= 24, 'generated password passed to CustomerUserAdd must be non-empty and long enough' );
     Assert( !$Created->{UserPassword} && !$Created->{Password}, 'create response must not return password' );
     Assert( $Created->{Login} eq 'updated@example.com', 'valid create returns public Login' );
+    Assert( $Created->{UserLogin} eq 'updated@example.com', 'valid create retains legacy UserLogin alias' );
     Assert( $Created->{Status} eq 'active', 'valid create returns active status' );
     Assert( !@{$CreateErrors}, 'valid create must not return errors' );
 
@@ -534,10 +558,11 @@ my $OM = bless {
     Assert( !exists $CustomerUserObject->{LastUpdate}->{UserPassword}, 'omitted password must remain unchanged' );
     Assert( !$RouteOnlyResponse->{Data}->{CustomerUser}->{UserPassword} && !$RouteOnlyResponse->{Data}->{CustomerUser}->{Password}, 'update response must not return password' );
     Assert(
-        join( q{,}, sort keys %{ $RouteOnlyResponse->{Data}->{CustomerUser} } ) eq 'CustomerID,Email,FirstName,LastName,Login,Status',
-        'update response must expose only safe customer user fields',
+        join( q{,}, sort keys %{ $RouteOnlyResponse->{Data}->{CustomerUser} } ) eq $LookupKeys,
+        'update response must expose safe canonical fields and legacy aliases',
     );
     Assert( $RouteOnlyResponse->{Data}->{CustomerUser}->{LastName} eq 'RuntimePatched', 'update response must return actual updated user' );
+    Assert( $RouteOnlyResponse->{Data}->{CustomerUser}->{UserLastname} eq 'RuntimePatched', 'update response must retain legacy UserLastname alias' );
 
     my $AuthPasswordUpdateResponse = $Operation->Run(
         CustomerUserLogin => 'existing@example.com',

@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.9`.
+Current package version: `1.6.10`.
 
 The package provides a controlled REST surface for:
 
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.9",
+  "Version": "1.6.10",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.9",
+  "Version": "1.6.10",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -1195,11 +1195,11 @@ logic and exposes only user ID, login, and formatted full name.
 {
   "CustomerUsers": [
     {
-      "Login": "example.customer",
-      "CustomerID": "example-customer",
-      "FirstName": "Example",
-      "LastName": "Customer",
-      "Email": "customer@example.com",
+      "UserLogin": "example.customer",
+      "UserEmail": "customer@example.com",
+      "UserCustomerID": "example-customer",
+      "UserFirstname": "Example",
+      "UserLastname": "Customer",
       "Status": "active"
     }
   ]
@@ -1217,7 +1217,12 @@ logic and exposes only user ID, login, and formatted full name.
     "FirstName": "Example",
     "LastName": "Customer",
     "Email": "customer@example.com",
-    "Status": "active"
+    "Status": "active",
+    "UserLogin": "example.customer",
+    "UserEmail": "customer@example.com",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "Example",
+    "UserLastname": "Customer"
   }
 }
 ```
@@ -1244,20 +1249,31 @@ Wildcard-only or too-short customer searches return an empty result and warning:
     "FirstName": "Example",
     "LastName": "Customer",
     "Email": "customer@example.com",
-    "Status": "active"
+    "Status": "active",
+    "UserLogin": "example.customer",
+    "UserEmail": "customer@example.com",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "Example",
+    "UserLastname": "Customer"
   },
   "Errors": []
 }
 ```
 
-`CustomerUser::Get` is the exact login lookup. `CustomerUser::Lookup` exists for
-exact existence checks by `Login` or exact email checks by `Email`; it does not
-use fuzzy customer search semantics, and wildcard-like email values are rejected.
-Search and Lookup include active and disabled customer users. Safe customer-user
-objects expose only `Login`, `CustomerID`, `FirstName`, `LastName`, `Email`, and
-`Status`; `Status` is `active` when the Znuny `ValidID` is one of
-`Kernel::System::Valid->ValidIDsGet()` and `disabled` otherwise. Email is not
-treated as unique unless the exact lookup finds exactly one customer user.
+`CustomerUser::Get` is the exact login lookup by path `CustomerUserLogin` and
+returns `Found` plus the same safe canonical and legacy customer-user fields
+when a record is found. `CustomerUser::Lookup` exists for exact existence checks
+by `Login` or exact email checks by `Email`; it does not use fuzzy customer
+search semantics, and wildcard-like email values are rejected.
+Search and Lookup include active and disabled customer users. Search preserves
+the legacy public `UserLogin`, `UserEmail`, `UserCustomerID`, `UserFirstname`,
+and `UserLastname` fields and adds `Status`. Lookup returns canonical `Login`,
+`Email`, `CustomerID`, `FirstName`, `LastName`, and `Status` fields and retains
+the legacy `UserLogin`, `UserEmail`, `UserCustomerID`, `UserFirstname`, and
+`UserLastname` aliases for backward compatibility. `Status` is `active` when the
+Znuny `ValidID` is one of `Kernel::System::Valid->ValidIDsGet()` and `disabled`
+otherwise. Email is not treated as unique unless the exact lookup finds exactly
+one customer user.
 
 Missing login:
 
@@ -2221,7 +2237,12 @@ password-reset workflow to receive a new password.
     "FirstName": "John",
     "LastName": "Doe",
     "Email": "john.doe@example.com",
-    "Status": "active"
+    "Status": "active",
+    "UserLogin": "john.doe@example.com",
+    "UserEmail": "john.doe@example.com",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "John",
+    "UserLastname": "Doe"
   },
   "Errors": []
 }
@@ -2314,7 +2335,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.9.opm
+/path/to/output/ZnunyAgentList-1.6.10.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -2326,14 +2347,14 @@ Install:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.9.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.10.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.9.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.10.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:
@@ -2456,6 +2477,12 @@ metadata, logs, review files, or generated `.opm` files.
 
 - Keep runtime changes, Web Service template changes, scripts, and documentation
   in sync.
+- Extend public APIs additively in minor releases. Do not remove or rename
+  existing response fields, routes, envelopes, error shapes, authentication
+  semantics, or accepted request fields unless a breaking change is explicitly
+  requested and handled as a deliberate versioned decision.
+- Retain legacy fields when adding aliases or metadata for existing public
+  responses.
 - Do not commit generated `.opm` files, local smoke-test env files, logs,
   credentials, tokens, or session IDs.
 - Do not add raw SQL, migrations, Znuny core modifications, or automatic

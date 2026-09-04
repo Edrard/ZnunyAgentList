@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.9';
+use constant PACKAGE_VERSION => '1.6.10';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
@@ -2036,13 +2036,28 @@ sub TicketCustomerUpdate {
 sub CustomerUserData {
     my ( $Class, %UserData ) = @_;
 
+    my $LegacyData = $Class->CustomerUserLegacyData(%UserData);
+
     return {
-        Login      => $UserData{UserLogin}      // q{},
-        CustomerID => $UserData{UserCustomerID} // q{},
-        FirstName  => $UserData{UserFirstname}  // q{},
-        LastName   => $UserData{UserLastname}   // q{},
-        Email      => $UserData{UserEmail}      // q{},
-        Status     => $Class->CustomerUserActiveStatus(%UserData),
+        %{$LegacyData},
+        Login      => $LegacyData->{UserLogin},
+        CustomerID => $LegacyData->{UserCustomerID},
+        FirstName  => $LegacyData->{UserFirstname},
+        LastName   => $LegacyData->{UserLastname},
+        Email      => $LegacyData->{UserEmail},
+    };
+}
+
+sub CustomerUserLegacyData {
+    my ( $Class, %UserData ) = @_;
+
+    return {
+        UserLogin      => $UserData{UserLogin}      // q{},
+        UserCustomerID => $UserData{UserCustomerID} // q{},
+        UserFirstname  => $UserData{UserFirstname}  // q{},
+        UserLastname   => $UserData{UserLastname}   // q{},
+        UserEmail      => $UserData{UserEmail}      // q{},
+        Status         => $Class->CustomerUserActiveStatus(%UserData),
     };
 }
 
