@@ -38,8 +38,8 @@ sub Run {
         }
     }
 
-    $Input{PasswordProvided} = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ParamExists( \%Param, 'Password' )
-        || Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ParamExists( \%Param, 'UserPassword' );
+    $Input{PasswordProvided}
+        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserPasswordInputProvided( \%Param );
 
     my ( $CustomerUser, $Errors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
         %Input,

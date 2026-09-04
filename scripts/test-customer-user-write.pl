@@ -24,6 +24,7 @@ BEGIN {
 }
 
 use Kernel::GenericInterface::Operation::ZnunyAgentList::Common;
+use Kernel::GenericInterface::Operation::CustomerUser::Create;
 use Kernel::GenericInterface::Operation::CustomerUser::Lookup;
 use Kernel::GenericInterface::Operation::CustomerUser::Search;
 use Kernel::GenericInterface::Operation::CustomerUser::Update;
@@ -402,6 +403,66 @@ my $OM = bless {
     );
     Assert( !exists $CustomerUserObject->{LastAdd}, 'create with supplied password must not call CustomerUserAdd' );
 
+    my $CreateOperation = bless {}, 'Kernel::GenericInterface::Operation::CustomerUser::Create';
+
+    my $AuthPasswordCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin  => 'api-user',
+            Password   => 'api-auth-secret',
+            FirstName  => 'Auth',
+            LastName   => 'Create',
+            Login      => 'auth-create@example.com',
+            Email      => 'auth-create@example.com',
+            CustomerID => 'second-customer',
+        },
+    );
+    Assert( $AuthPasswordCreateResponse->{Data}->{Created}, 'Create operation must allow GenericInterface auth Password in transport data' );
+    Assert( !@{ $AuthPasswordCreateResponse->{Data}->{Errors} }, 'Create operation auth Password must not produce supplied-password validation error' );
+    Assert( $CustomerUserObject->{LastAdd}->{UserLogin} eq 'auth-create@example.com', 'Create operation must still write the intended customer Login' );
+    Assert( exists $CustomerUserObject->{LastAdd}->{UserPassword}, 'Create operation must still generate a private customer password' );
+    Assert(
+        !$AuthPasswordCreateResponse->{Data}->{CustomerUser}->{UserPassword}
+            && !$AuthPasswordCreateResponse->{Data}->{CustomerUser}->{Password},
+        'Create operation auth Password response must not expose any password',
+    );
+
+    delete $CustomerUserObject->{LastAdd};
+    my $BodyPasswordCreateResponse = $CreateOperation->Run(
+        Data => {
+            Password   => 'customer-password',
+            FirstName  => 'Body',
+            LastName   => 'Password',
+            Login      => 'body-password-create@example.com',
+            Email      => 'body-password-create@example.com',
+            CustomerID => 'second-customer',
+        },
+    );
+    Assert( !$BodyPasswordCreateResponse->{Data}->{Created}, 'Create operation must reject visible body Password input' );
+    Assert(
+        scalar( grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{ $BodyPasswordCreateResponse->{Data}->{Errors} } ),
+        'Create operation visible body Password must return safe supplied-password validation error',
+    );
+    Assert( !exists $CustomerUserObject->{LastAdd}, 'Create operation visible body Password must prevent CustomerUserAdd' );
+
+    my $BodyUserPasswordCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin    => 'api-user',
+            Password     => 'api-auth-secret',
+            UserPassword => 'customer-password',
+            FirstName    => 'Body',
+            LastName     => 'UserPassword',
+            Login        => 'body-userpassword-create@example.com',
+            Email        => 'body-userpassword-create@example.com',
+            CustomerID   => 'second-customer',
+        },
+    );
+    Assert( !$BodyUserPasswordCreateResponse->{Data}->{Created}, 'Create operation must reject body UserPassword input even with auth Password present' );
+    Assert(
+        scalar( grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{ $BodyUserPasswordCreateResponse->{Data}->{Errors} } ),
+        'Create operation body UserPassword must return safe supplied-password validation error',
+    );
+    Assert( !exists $CustomerUserObject->{LastAdd}, 'Create operation body UserPassword must prevent CustomerUserAdd' );
+
     {
         local $CustomerUserObject->{NextPassword} = q{};
         my ( $FailedPasswordCreate, $FailedPasswordErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
@@ -478,6 +539,56 @@ my $OM = bless {
     );
     Assert( $RouteOnlyResponse->{Data}->{CustomerUser}->{LastName} eq 'RuntimePatched', 'update response must return actual updated user' );
 
+    my $AuthPasswordUpdateResponse = $Operation->Run(
+        CustomerUserLogin => 'existing@example.com',
+        Data              => {
+            UserLogin => 'api-user',
+            Password  => 'api-auth-secret',
+            LastName  => 'AuthPasswordPatched',
+        },
+    );
+    Assert( $AuthPasswordUpdateResponse->{Data}->{Updated}, 'Update operation must allow GenericInterface auth Password in transport data' );
+    Assert( !@{ $AuthPasswordUpdateResponse->{Data}->{Errors} }, 'Update operation auth Password must not produce supplied-password validation error' );
+    Assert( $CustomerUserObject->{LastUpdate}->{ID} eq 'existing@example.com', 'Update operation auth Password must keep route CustomerUserLogin as update ID' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLastname} eq 'AuthPasswordPatched', 'Update operation auth Password must still apply intended body fields' );
+    Assert( !exists $CustomerUserObject->{LastUpdate}->{UserPassword}, 'Update operation auth Password must not change customer password' );
+    Assert(
+        !$AuthPasswordUpdateResponse->{Data}->{CustomerUser}->{UserPassword}
+            && !$AuthPasswordUpdateResponse->{Data}->{CustomerUser}->{Password},
+        'Update operation auth Password response must not expose any password',
+    );
+
+    delete $CustomerUserObject->{LastUpdate};
+    my $BodyPasswordUpdateResponse = $Operation->Run(
+        CustomerUserLogin => 'existing@example.com',
+        Data              => {
+            Password => 'customer-password',
+            LastName => 'BodyPasswordPatched',
+        },
+    );
+    Assert( !$BodyPasswordUpdateResponse->{Data}->{Updated}, 'Update operation must reject visible body Password input' );
+    Assert(
+        scalar( grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{ $BodyPasswordUpdateResponse->{Data}->{Errors} } ),
+        'Update operation visible body Password must return safe supplied-password validation error',
+    );
+    Assert( !exists $CustomerUserObject->{LastUpdate}, 'Update operation visible body Password must prevent CustomerUserUpdate' );
+
+    my $BodyUserPasswordUpdateResponse = $Operation->Run(
+        CustomerUserLogin => 'existing@example.com',
+        Data              => {
+            UserLogin    => 'api-user',
+            Password     => 'api-auth-secret',
+            UserPassword => 'customer-password',
+            LastName     => 'BodyUserPasswordPatched',
+        },
+    );
+    Assert( !$BodyUserPasswordUpdateResponse->{Data}->{Updated}, 'Update operation must reject body UserPassword input even with auth Password present' );
+    Assert(
+        scalar( grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{ $BodyUserPasswordUpdateResponse->{Data}->{Errors} } ),
+        'Update operation body UserPassword must return safe supplied-password validation error',
+    );
+    Assert( !exists $CustomerUserObject->{LastUpdate}, 'Update operation body UserPassword must prevent CustomerUserUpdate' );
+
     my $MismatchResponse = $Operation->Run(
         CustomerUserLogin => 'existing@example.com',
         Data              => {
@@ -553,7 +664,7 @@ my $OM = bless {
     Assert( $CustomerUserObject->{LastUpdate}->{ID} eq 'existing@example.com', 'rename must use route login as ID' );
     Assert( $CustomerUserObject->{LastUpdate}->{UserLogin} eq 'renamed@example.com', 'update must support explicit login rename' );
     Assert( $CustomerUserObject->{LastUpdate}->{UserFirstname} eq 'Existing', 'rename must preserve unspecified first name' );
-    Assert( $CustomerUserObject->{LastUpdate}->{UserLastname} eq 'RuntimePatched', 'rename must preserve prior last name' );
+    Assert( $CustomerUserObject->{LastUpdate}->{UserLastname} eq 'AuthPasswordPatched', 'rename must preserve prior last name' );
     Assert( $CustomerUserObject->{LastUpdate}->{UserEmail} eq 'existing@example.com', 'rename must preserve valid stored email' );
     Assert( $Renamed->{Login} eq 'renamed@example.com', 'rename response must return actual renamed user' );
     Assert( !@{$RenameErrors}, 'valid rename must not return errors' );

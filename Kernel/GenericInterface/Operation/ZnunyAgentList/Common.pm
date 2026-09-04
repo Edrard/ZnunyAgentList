@@ -9,7 +9,7 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.8';
+use constant PACKAGE_VERSION => '1.6.9';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
@@ -233,6 +233,22 @@ sub BodyParamExists {
     return 0 if !$ParamRef || !$Name || ref $ParamRef->{Data} ne 'HASH';
 
     return exists $ParamRef->{Data}->{$Name} ? 1 : 0;
+}
+
+sub CustomerUserPasswordInputProvided {
+    my ( $Class, $ParamRef ) = @_;
+
+    return 0 if !$ParamRef;
+    return 1 if exists $ParamRef->{UserPassword};
+    return 1 if $Class->BodyParamExists( $ParamRef, 'UserPassword' );
+
+    # Znuny REST merges GenericInterface auth Password into operation data.
+    return 1 if exists $ParamRef->{Password} && !exists $ParamRef->{UserLogin};
+    return 1
+        if $Class->BodyParamExists( $ParamRef, 'Password' )
+        && !$Class->BodyParamExists( $ParamRef, 'UserLogin' );
+
+    return 0;
 }
 
 sub CleanString {

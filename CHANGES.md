@@ -1,6 +1,10 @@
 # ZnunyAgentList Changelog
 
-## 1.6.8 - Unreleased
+## 1.6.9 - Unreleased
+
+- Fixed `CustomerUser::Create` and `CustomerUser::Update` so GenericInterface authentication `Password` parameters are not mistaken for unsupported customer-user password input.
+
+## 1.6.8 - 2026-09-04
 
 - Included disabled customer users in `CustomerUser::Search` and exact `CustomerUser::Lookup` results with an explicit `Status` field.
 - Hardened customer-user create/update uniqueness checks against active and disabled login/email collisions before calling Znuny write APIs.

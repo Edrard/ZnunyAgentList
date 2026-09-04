@@ -63,7 +63,7 @@ require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 SOPM="$ROOT/ZnunyAgentList.sopm"
 CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 WEBSERVICE_YAML="$ROOT/examples/webservices/AdvancedZnunyAgentListREST.yml"
-EXPECTED_VERSION='1.6.8'
+EXPECTED_VERSION='1.6.9'
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'

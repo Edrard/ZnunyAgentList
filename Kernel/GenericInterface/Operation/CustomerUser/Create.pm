@@ -24,9 +24,8 @@ sub Run {
     my %Input = map {
         $_ => Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, $_ )
     } qw(FirstName LastName Login Email CustomerID);
-    $Input{PasswordProvided} = exists $Param{Password}
-        || exists $Param{UserPassword}
-        || ( ref $Param{Data} eq 'HASH' && ( exists $Param{Data}->{Password} || exists $Param{Data}->{UserPassword} ) );
+    $Input{PasswordProvided}
+        = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserPasswordInputProvided( \%Param );
 
     my ( $CustomerUser, $Errors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
         %Input,
