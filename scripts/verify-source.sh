@@ -63,7 +63,7 @@ require_file 'examples/webservices/AdvancedZnunyAgentListREST.yml'
 SOPM="$ROOT/ZnunyAgentList.sopm"
 CONFIG_XML="$ROOT/Kernel/Config/Files/XML/ZnunyAgentList.xml"
 WEBSERVICE_YAML="$ROOT/examples/webservices/AdvancedZnunyAgentListREST.yml"
-EXPECTED_VERSION='1.6.10'
+EXPECTED_VERSION='1.6.11'
 
 if ! command -v xmllint >/dev/null 2>&1; then
     fail 'xmllint is required for XML checks. Install the Rocky Linux libxml2 package or run XML validation manually.'
@@ -550,10 +550,17 @@ if grep -Fq 'CustomerUserAdd(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAge
     && grep -Fq 'CustomerCompanyList(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq 'GenerateRandomPassword( Size => 24 )' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq 'UserPassword => $GeneratedPassword' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerUserCreateTicketReconciliation' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'CustomerUserLoginRaw => $Login' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq "ArchiveFlags         => [ 'y', 'n' ]" "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'TicketCustomerSet(' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
+    && grep -Fq 'No       => $CustomerID' "$ROOT/Kernel/GenericInterface/Operation/ZnunyAgentList/Common.pm" \
     && grep -Fq 'PasswordProvided' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Create.pm" \
+    && grep -Fq 'OptionalZeroOne' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Create.pm" \
+    && grep -Fq 'ReconcileTickets must be 0 or 1.' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Create.pm" \
     && grep -Fq 'PasswordProvided' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser/Update.pm" \
     && ! grep -R -n -E 'Password.*=>' "$ROOT/Kernel/GenericInterface/Operation/CustomerUser" --include='*.pm' | grep -F 'Data' >/dev/null 2>&1; then
-    pass 'Customer user write helpers use standard Znuny APIs, company validation, generated create password, and password input rejection'
+    pass 'Customer user write helpers use standard Znuny APIs, company validation, generated create password, optional create ticket reconciliation, and password input rejection'
 else
     fail 'Customer user write helper checks were not found'
 fi
@@ -581,6 +588,11 @@ if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'HasMore' "$ROOT/README.md" \
     && grep -Fq 'Offset' "$ROOT/README.md" \
     && grep -Fq 'Company ID' "$ROOT/README.md" \
+    && grep -Fq 'ReconcileTickets' "$ROOT/README.md" \
+    && grep -Fq 'Create-only opt-in' "$ROOT/README.md" \
+    && grep -Fq 'Ticket `CustomerUserID` is preserved' "$ROOT/README.md" \
+    && grep -Fq 'including archived and non-archived tickets' "$ROOT/README.md" \
+    && grep -Fq 'CustomerUser::Update` is not affected' "$ROOT/README.md" \
     && grep -Fq 'Password input is not supported' "$ROOT/README.md" \
     && grep -Fq 'generates a private random password' "$ROOT/README.md" \
     && grep -Fq 'password-reset workflow' "$ROOT/README.md" \

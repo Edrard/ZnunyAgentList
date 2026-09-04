@@ -9,10 +9,11 @@ use MIME::Base64 qw(encode_base64);
 our $ObjectManagerDisabled = 1;
 
 use constant PACKAGE_NAME    => 'ZnunyAgentList';
-use constant PACKAGE_VERSION => '1.6.10';
+use constant PACKAGE_VERSION => '1.6.11';
 use constant AUTH_ERROR_CODE => 'ZnunyAgentList.AuthFail';
 use constant WRITE_ERROR_CODE => 'ZnunyAgentList.WriteForbidden';
 use constant CUSTOMER_COMPANY_MAX_OFFSET => 2147483647;
+use constant CUSTOMER_USER_RECONCILE_TICKET_LIMIT => 100_000;
 
 sub New {
     my ( $Class, $Type, %Param ) = @_;
@@ -356,6 +357,22 @@ sub Boolean {
     return 0 if $Boolean =~ m{\A(?:0|false|no|off)\z};
 
     return 0;
+}
+
+sub OptionalZeroOne {
+    my ( $Class, $Value ) = @_;
+
+    return ( 0, undef ) if !defined $Value || ref $Value;
+
+    my $String = "$Value";
+    $String =~ s/[\x00-\x1f\x7f]//g;
+    $String =~ s/^\s+//;
+    $String =~ s/\s+$//;
+
+    return ( 1, 0 ) if $String eq '0';
+    return ( 1, 1 ) if $String eq '1';
+
+    return ( 0, undef );
 }
 
 sub Limit {
@@ -1280,6 +1297,110 @@ sub CustomerUserCreateData {
     return ( undef, $CreatedErrors ) if @{$CreatedErrors || []};
 
     return ( $Created, [] );
+}
+
+sub CustomerUserCreateTicketReconciliation {
+    my ( $Class, %Param ) = @_;
+
+    my $Login      = $Class->SafeString( $Param{Login}, 255 );
+    my $CustomerID = $Class->SafeString( $Param{CustomerID}, 255 );
+    my $UserID     = $Class->PositiveInt( $Param{UserID} );
+
+    my $Stats = {
+        Requested => 1,
+        Found     => 0,
+        Changed   => 0,
+        Skipped   => 0,
+        Failed    => 0,
+        Errors    => [],
+    };
+
+    if ( !$Login || !$CustomerID || !$UserID ) {
+        push @{ $Stats->{Errors} }, {
+            Error => 'Ticket reconciliation could not start because required customer data is missing.',
+        };
+        return $Stats;
+    }
+
+    my $TicketObject = eval { $Kernel::OM->Get('Kernel::System::Ticket') };
+    if ( $@ || !$TicketObject ) {
+        push @{ $Stats->{Errors} }, {
+            Error => 'Ticket API is unavailable.',
+        };
+        return $Stats;
+    }
+
+    my @TicketIDs = eval {
+        $TicketObject->TicketSearch(
+            Result               => 'ARRAY',
+            Limit                => CUSTOMER_USER_RECONCILE_TICKET_LIMIT,
+            CustomerUserLoginRaw => $Login,
+            ArchiveFlags         => [ 'y', 'n' ],
+            UserID               => 1,
+        );
+    };
+    if ($@) {
+        push @{ $Stats->{Errors} }, {
+            Error => 'Ticket reconciliation search failed.',
+        };
+        return $Stats;
+    }
+
+    $Stats->{Found} = 0 + @TicketIDs;
+
+    TICKETID:
+    for my $TicketID (@TicketIDs) {
+        my $SafeTicketID = $Class->PositiveInt($TicketID);
+        if ( !$SafeTicketID ) {
+            $Stats->{Failed}++;
+            push @{ $Stats->{Errors} }, {
+                TicketID => 0,
+                Error    => 'Ticket reconciliation found an invalid TicketID.',
+            };
+            next TICKETID;
+        }
+
+        my %Ticket = eval {
+            $TicketObject->TicketGet(
+                TicketID      => $SafeTicketID,
+                DynamicFields => 0,
+                UserID        => 1,
+            );
+        };
+        if ( $@ || !$Ticket{TicketID} ) {
+            $Stats->{Failed}++;
+            push @{ $Stats->{Errors} }, {
+                TicketID => 0 + $SafeTicketID,
+                Error    => 'Ticket data could not be read.',
+            };
+            next TICKETID;
+        }
+
+        if ( ( $Ticket{CustomerID} // q{} ) eq $CustomerID ) {
+            $Stats->{Skipped}++;
+            next TICKETID;
+        }
+
+        my $Success = eval {
+            $TicketObject->TicketCustomerSet(
+                TicketID => $SafeTicketID,
+                No       => $CustomerID,
+                UserID   => $UserID,
+            );
+        };
+        if ( $@ || !$Success ) {
+            $Stats->{Failed}++;
+            push @{ $Stats->{Errors} }, {
+                TicketID => 0 + $SafeTicketID,
+                Error    => 'Ticket CustomerID could not be updated.',
+            };
+            next TICKETID;
+        }
+
+        $Stats->{Changed}++;
+    }
+
+    return $Stats;
 }
 
 sub CustomerUserUpdateData {

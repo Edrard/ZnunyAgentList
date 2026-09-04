@@ -3,7 +3,7 @@
 `ZnunyAgentList` is a standalone Znuny 6.5 LTS GenericInterface extension for
 integration systems, monitoring tools, and service automation jobs.
 
-Current package version: `1.6.10`.
+Current package version: `1.6.11`.
 
 The package provides a controlled REST surface for:
 
@@ -266,7 +266,7 @@ checks documented above.
 | `POST` | `/TicketUnlock` | `Ticket::Unlock` | Change only the ticket lock state to `unlock` | `TicketID` or `TicketNumber` | Safe ticket metadata including `LockID` and `Lock`, `Warnings[]` |
 | `POST` | `/TicketMoveAssign/Validate` | `Ticket::MoveAssignValidate` | Validate a queue, customer, and/or owner change without changing the ticket | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, optional `CustomerUserID`, conditional `Note` | `Valid`, `RequiredNote`, `CustomerChanged`, `Current`, `Target`, `Errors[]`, `Warnings[]` |
 | `POST` | `/TicketMoveAssign` | `Ticket::MoveAssign` | Apply a prevalidated queue, customer, and/or owner change | `TicketID`, optional `QueueID`/`QueueName`, optional `OwnerID`/`OwnerLogin`, optional `CustomerUserID`, conditional `Note` | `Success`, `QueueChanged`, `CustomerChanged`, `OwnerChanged`, `NoteCreated`, `Before`, `After`, `Errors[]`, `Warnings[]` |
-| `POST` | `/CustomerUser` | `CustomerUser::Create` | Create a customer user | `FirstName`, `LastName`, `Login`, `Email`, `CustomerID` | `Created`, safe `CustomerUser`, `Errors[]` |
+| `POST` | `/CustomerUser` | `CustomerUser::Create` | Create a customer user | `FirstName`, `LastName`, `Login`, `Email`, `CustomerID`, optional `ReconcileTickets` | `Created`, safe `CustomerUser`, optional `ReconcileTickets`, `Errors[]` |
 | `PATCH` | `/CustomerUser/:CustomerUserLogin` | `CustomerUser::Update` | Update a customer user | `CurrentLogin`/path login, optional changed fields | `Updated`, safe `CustomerUser`, `Errors[]` |
 
 Example `POST /TicketArticle` body:
@@ -929,7 +929,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.10",
+  "Version": "1.6.11",
   "Success": 1,
   "Time": "2026-01-01 10:00:00"
 }
@@ -942,7 +942,7 @@ GenericTicketConnector response shapes and are not documented in detail here.
 ```json
 {
   "Plugin": "ZnunyAgentList",
-  "Version": "1.6.10",
+  "Version": "1.6.11",
   "Features": {
     "AgentList": 1,
     "AgentAssignableQueues": 1,
@@ -2207,7 +2207,8 @@ safe ticket metadata or update the local cache.
   "LastName": "Doe",
   "Login": "john.doe@example.com",
   "Email": "john.doe@example.com",
-  "CustomerID": "example-customer"
+  "CustomerID": "example-customer",
+  "ReconcileTickets": 1
 }
 ```
 
@@ -2228,6 +2229,21 @@ internally and never returns it. `UserPassword` is explicitly rejected with
 customer who needs Customer Portal access must use the normal administrative or
 password-reset workflow to receive a new password.
 
+`ReconcileTickets` is a Create-only opt-in flag. Omitted or `0` preserves native
+Znuny CustomerUser create behavior and performs no ticket scan. `1` runs a
+post-create reconciliation for existing tickets whose `CustomerUserID` exactly
+matches the newly created login, including archived and non-archived tickets.
+Native Znuny CustomerUser create does not reconcile those historical ticket
+records by itself.
+
+The reconciliation updates only ticket `CustomerID` through Znuny's standard
+ticket customer API when the ticket still points to a different customer ID.
+Ticket `CustomerUserID` is preserved. Already-correct tickets are skipped. If
+one ticket update fails after the CustomerUser was created, the CustomerUser is
+not rolled back; `Created` remains `1` and the reconciliation error is reported
+separately. `CustomerUser::Update` is not affected and continues to use native
+Znuny update/event behavior.
+
 ```json
 {
   "Created": 1,
@@ -2243,6 +2259,14 @@ password-reset workflow to receive a new password.
     "UserCustomerID": "example-customer",
     "UserFirstname": "John",
     "UserLastname": "Doe"
+  },
+  "ReconcileTickets": {
+    "Requested": 1,
+    "Found": 10,
+    "Changed": 3,
+    "Skipped": 7,
+    "Failed": 0,
+    "Errors": []
   },
   "Errors": []
 }
@@ -2335,7 +2359,7 @@ bash scripts/build-package.sh /path/to/ZnunyAgentList /path/to/output
 This creates:
 
 ```text
-/path/to/output/ZnunyAgentList-1.6.10.opm
+/path/to/output/ZnunyAgentList-1.6.11.opm
 ```
 
 4. Install or upgrade with the Znuny console as `otrs`.
@@ -2347,14 +2371,14 @@ Install:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.10.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Install /path/to/output/ZnunyAgentList-1.6.11.opm" otrs
 ```
 
 Upgrade:
 
 ```bash
 cd "$ZNUNY_HOME"
-su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.10.opm" otrs
+su -s /bin/bash -c "bin/otrs.Console.pl Admin::Package::Upgrade /path/to/output/ZnunyAgentList-1.6.11.opm" otrs
 ```
 
 5. Rebuild configuration and delete cache:

@@ -142,6 +142,57 @@ sub Assert {
 }
 
 {
+    package Test::Ticket;
+
+    sub TicketSearch {
+        my ( $Self, %Param ) = @_;
+
+        $Self->{SearchCount}++;
+        $Self->{LastSearch} = { %Param };
+
+        my $Login = $Param{CustomerUserLoginRaw} || q{};
+        return @{ $Self->{SearchResults}->{$Login} || [] };
+    }
+
+    sub TicketGet {
+        my ( $Self, %Param ) = @_;
+
+        $Self->{GetCount}++;
+        push @{ $Self->{GetCalls} }, { %Param };
+
+        my $Ticket = $Self->{Tickets}->{ $Param{TicketID} };
+        return if !$Ticket;
+
+        return %{$Ticket};
+    }
+
+    sub TicketCustomerSet {
+        my ( $Self, %Param ) = @_;
+
+        $Self->{SetCount}++;
+        push @{ $Self->{SetCalls} }, { %Param };
+
+        return if $Self->{FailSet}->{ $Param{TicketID} };
+
+        $Self->{Tickets}->{ $Param{TicketID} }->{CustomerID} = $Param{No}
+            if exists $Self->{Tickets}->{ $Param{TicketID} } && defined $Param{No};
+
+        return 1;
+    }
+
+    sub Reset {
+        my ($Self) = @_;
+
+        delete @{$Self}{qw(SearchCount LastSearch GetCount GetCalls SetCount SetCalls FailSet SearchResults Tickets)};
+        $Self->{SearchResults} = {};
+        $Self->{Tickets}       = {};
+        $Self->{FailSet}       = {};
+
+        return 1;
+    }
+}
+
+{
     package Test::Valid;
 
     sub ValidIDsGet {
@@ -233,9 +284,13 @@ my $CustomerUserObject = bless {
         },
     },
 }, 'Test::CustomerUser';
+my $TicketObject = bless {}, 'Test::Ticket';
+$TicketObject->Reset();
+
 my $OM = bless {
     'Kernel::System::CustomerCompany' => bless( {}, 'Test::CustomerCompany' ),
     'Kernel::System::CustomerUser'    => $CustomerUserObject,
+    'Kernel::System::Ticket'          => $TicketObject,
     'Kernel::Config'                  => bless( {}, 'Test::Config' ),
     'Kernel::System::Group'           => bless( {}, 'Test::Group' ),
     'Kernel::System::Valid'           => bless( {}, 'Test::Valid' ),
@@ -428,6 +483,7 @@ my $SearchKeys = 'Status,UserCustomerID,UserEmail,UserFirstname,UserLastname,Use
 
     my $CreateOperation = bless {}, 'Kernel::GenericInterface::Operation::CustomerUser::Create';
 
+    $TicketObject->Reset();
     my $AuthPasswordCreateResponse = $CreateOperation->Run(
         Data => {
             UserLogin  => 'api-user',
@@ -448,6 +504,168 @@ my $SearchKeys = 'Status,UserCustomerID,UserEmail,UserFirstname,UserLastname,Use
             && !$AuthPasswordCreateResponse->{Data}->{CustomerUser}->{Password},
         'Create operation auth Password response must not expose any password',
     );
+    Assert( !exists $AuthPasswordCreateResponse->{Data}->{ReconcileTickets}, 'Create operation without ReconcileTickets must preserve original response shape' );
+    Assert( !( $TicketObject->{SearchCount} || 0 ), 'Create operation without ReconcileTickets must not search tickets' );
+
+    $TicketObject->Reset();
+    delete $CustomerUserObject->{LastAdd};
+    my $ReconcileZeroCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin         => 'api-user',
+            Password          => 'api-auth-secret',
+            FirstName         => 'No',
+            LastName          => 'Reconcile',
+            Login             => 'reconcile-zero@example.com',
+            Email             => 'reconcile-zero@example.com',
+            CustomerID        => 'second-customer',
+            ReconcileTickets  => 0,
+        },
+    );
+    Assert( $ReconcileZeroCreateResponse->{Data}->{Created}, 'Create operation with ReconcileTickets 0 must still create customer user' );
+    Assert( !exists $ReconcileZeroCreateResponse->{Data}->{ReconcileTickets}, 'Create operation with ReconcileTickets 0 must not add reconciliation stats' );
+    Assert( !( $TicketObject->{SearchCount} || 0 ), 'Create operation with ReconcileTickets 0 must not search tickets' );
+
+    $TicketObject->Reset();
+    delete $CustomerUserObject->{LastAdd};
+    my $InvalidReconcileCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin        => 'api-user',
+            Password         => 'api-auth-secret',
+            FirstName        => 'Bad',
+            LastName         => 'Reconcile',
+            Login            => 'invalid-reconcile@example.com',
+            Email            => 'invalid-reconcile@example.com',
+            CustomerID       => 'second-customer',
+            ReconcileTickets => 'true',
+        },
+    );
+    Assert( !$InvalidReconcileCreateResponse->{Data}->{Created}, 'Create operation must reject non-0/1 ReconcileTickets values' );
+    Assert(
+        scalar( grep { $_ eq 'ReconcileTickets must be 0 or 1.' } @{ $InvalidReconcileCreateResponse->{Data}->{Errors} } ),
+        'invalid ReconcileTickets must return deterministic validation error',
+    );
+    Assert( !exists $CustomerUserObject->{LastAdd}, 'invalid ReconcileTickets must prevent CustomerUserAdd' );
+    Assert( !( $TicketObject->{SearchCount} || 0 ), 'invalid ReconcileTickets must not search tickets' );
+
+    $TicketObject->Reset();
+    my $RefReconcileCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin        => 'api-user',
+            Password         => 'api-auth-secret',
+            FirstName        => 'Ref',
+            LastName         => 'Reconcile',
+            Login            => 'ref-reconcile@example.com',
+            Email            => 'ref-reconcile@example.com',
+            CustomerID       => 'second-customer',
+            ReconcileTickets => [1],
+        },
+    );
+    Assert( !$RefReconcileCreateResponse->{Data}->{Created}, 'Create operation must reject ref-valued ReconcileTickets' );
+    Assert(
+        scalar( grep { $_ eq 'ReconcileTickets must be 0 or 1.' } @{ $RefReconcileCreateResponse->{Data}->{Errors} } ),
+        'ref-valued ReconcileTickets must return deterministic validation error',
+    );
+    Assert( !( $TicketObject->{SearchCount} || 0 ), 'ref-valued ReconcileTickets must not search tickets' );
+
+    $TicketObject->Reset();
+    my $DuplicateReconcileCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin        => 'api-user',
+            Password         => 'api-auth-secret',
+            FirstName        => 'Duplicate',
+            LastName         => 'Reconcile',
+            Login            => 'existing@example.com',
+            Email            => 'duplicate-reconcile@example.com',
+            CustomerID       => 'second-customer',
+            ReconcileTickets => 1,
+        },
+    );
+    Assert( !$DuplicateReconcileCreateResponse->{Data}->{Created}, 'failed create with ReconcileTickets 1 must keep Created 0' );
+    Assert( !exists $DuplicateReconcileCreateResponse->{Data}->{ReconcileTickets}, 'failed create must not return reconciliation stats' );
+    Assert( !( $TicketObject->{SearchCount} || 0 ), 'failed create with ReconcileTickets 1 must not search tickets' );
+
+    $TicketObject->Reset();
+    delete $CustomerUserObject->{LastAdd};
+    my $NoMatchReconcileCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin        => 'api-user',
+            Password         => 'api-auth-secret',
+            FirstName        => 'NoMatch',
+            LastName         => 'Reconcile',
+            Login            => 'reconcile-nomatch@example.com',
+            Email            => 'reconcile-nomatch@example.com',
+            CustomerID       => 'second-customer',
+            ReconcileTickets => 1,
+        },
+    );
+    my $NoMatchStats = $NoMatchReconcileCreateResponse->{Data}->{ReconcileTickets};
+    Assert( $NoMatchReconcileCreateResponse->{Data}->{Created}, 'Create operation with ReconcileTickets 1 must create before no-match reconciliation' );
+    Assert( $NoMatchStats->{Requested} == 1, 'no-match reconciliation reports Requested 1' );
+    Assert( $NoMatchStats->{Found} == 0, 'no-match reconciliation reports Found 0' );
+    Assert( $NoMatchStats->{Changed} == 0, 'no-match reconciliation reports Changed 0' );
+    Assert( $NoMatchStats->{Skipped} == 0, 'no-match reconciliation reports Skipped 0' );
+    Assert( $NoMatchStats->{Failed} == 0, 'no-match reconciliation reports Failed 0' );
+    Assert( !@{ $NoMatchStats->{Errors} }, 'no-match reconciliation reports no errors' );
+    Assert( $TicketObject->{SearchCount} == 1, 'ReconcileTickets 1 searches tickets once' );
+    Assert( $TicketObject->{LastSearch}->{CustomerUserLoginRaw} eq 'reconcile-nomatch@example.com', 'reconciliation searches by exact created login' );
+    Assert( $TicketObject->{LastSearch}->{Limit} == 100_000, 'reconciliation uses native CustomerUserUpdate ticket search limit' );
+    Assert( $TicketObject->{LastSearch}->{UserID} == 1, 'reconciliation search mirrors native system user search' );
+    Assert( join( q{,}, @{ $TicketObject->{LastSearch}->{ArchiveFlags} } ) eq 'y,n', 'reconciliation includes archived and non-archived tickets' );
+    Assert( !exists $TicketObject->{LastSearch}->{CustomerUserLogin}, 'reconciliation must not use fuzzy CustomerUserLogin search' );
+    Assert( !( $TicketObject->{SetCount} || 0 ), 'no-match reconciliation must not update tickets' );
+
+    $TicketObject->Reset();
+    $TicketObject->{SearchResults}->{'reconcile-partial@example.com'} = [ 701, 702, 703 ];
+    $TicketObject->{Tickets}->{701} = {
+        TicketID       => 701,
+        CustomerID     => 'second-customer',
+        CustomerUserID => 'reconcile-partial@example.com',
+    };
+    $TicketObject->{Tickets}->{702} = {
+        TicketID       => 702,
+        CustomerID     => 'old-customer',
+        CustomerUserID => 'reconcile-partial@example.com',
+    };
+    $TicketObject->{Tickets}->{703} = {
+        TicketID       => 703,
+        CustomerID     => 'old-customer',
+        CustomerUserID => 'reconcile-partial@example.com',
+    };
+    $TicketObject->{FailSet}->{703} = 1;
+
+    delete $CustomerUserObject->{LastAdd};
+    my $PartialReconcileCreateResponse = $CreateOperation->Run(
+        Data => {
+            UserLogin        => 'api-user',
+            Password         => 'api-auth-secret',
+            FirstName        => 'Partial',
+            LastName         => 'Reconcile',
+            Login            => 'reconcile-partial@example.com',
+            Email            => 'reconcile-partial@example.com',
+            CustomerID       => 'second-customer',
+            ReconcileTickets => 1,
+        },
+    );
+    my $PartialStats = $PartialReconcileCreateResponse->{Data}->{ReconcileTickets};
+    Assert( $PartialReconcileCreateResponse->{Data}->{Created}, 'partial reconciliation failure must keep Created 1' );
+    Assert( $PartialStats->{Requested} == 1, 'partial reconciliation reports Requested 1' );
+    Assert( $PartialStats->{Found} == 3, 'partial reconciliation reports all matched tickets' );
+    Assert( $PartialStats->{Changed} == 1, 'partial reconciliation counts changed tickets' );
+    Assert( $PartialStats->{Skipped} == 1, 'partial reconciliation counts already-correct tickets' );
+    Assert( $PartialStats->{Failed} == 1, 'partial reconciliation counts failed ticket updates' );
+    Assert(
+        $PartialStats->{Found} == $PartialStats->{Changed} + $PartialStats->{Skipped} + $PartialStats->{Failed},
+        'reconciliation stats keep Found equal to Changed plus Skipped plus Failed',
+    );
+    Assert( $PartialStats->{Errors}->[0]->{TicketID} == 703, 'partial reconciliation reports failed TicketID' );
+    Assert( $TicketObject->{GetCount} == 3, 'partial reconciliation reads every matched ticket' );
+    Assert( $TicketObject->{SetCount} == 2, 'partial reconciliation updates only mismatched tickets' );
+    Assert( $TicketObject->{Tickets}->{702}->{CustomerID} eq 'second-customer', 'partial reconciliation updates mismatched CustomerID' );
+    Assert( $TicketObject->{Tickets}->{702}->{CustomerUserID} eq 'reconcile-partial@example.com', 'partial reconciliation preserves CustomerUserID on changed ticket' );
+    Assert( $TicketObject->{SetCalls}->[0]->{No} eq 'second-customer', 'TicketCustomerSet receives only target CustomerID as No' );
+    Assert( $TicketObject->{SetCalls}->[0]->{UserID} == 2, 'TicketCustomerSet uses authenticated agent UserID for audit' );
+    Assert( !exists $TicketObject->{SetCalls}->[0]->{User}, 'TicketCustomerSet must not receive User during create reconciliation' );
+    Assert( !exists $TicketObject->{SetCalls}->[1]->{User}, 'failed TicketCustomerSet must also avoid User during create reconciliation' );
 
     delete $CustomerUserObject->{LastAdd};
     my $BodyPasswordCreateResponse = $CreateOperation->Run(
