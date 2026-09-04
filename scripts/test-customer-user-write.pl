@@ -302,7 +302,7 @@ my $OM = bless {
         },
     );
     Assert(
-        grep { $_->{Login} eq 'disabled@example.com' && $_->{Status} eq 'disabled' } @{ $SearchResponse->{Data}->{CustomerUsers} },
+        scalar grep { $_->{Login} eq 'disabled@example.com' && $_->{Status} eq 'disabled' } @{ $SearchResponse->{Data}->{CustomerUsers} },
         'Search operation includes disabled customer users',
     );
     Assert(
@@ -325,7 +325,7 @@ my $OM = bless {
         UserID     => 2,
     );
     Assert( !$InvalidEmailCreate, 'invalid email create must fail' );
-    Assert( grep { $_ eq 'Email is required and must be valid.' } @{$InvalidEmailErrors}, 'invalid email error must be present' );
+    Assert( scalar grep { $_ eq 'Email is required and must be valid.' } @{$InvalidEmailErrors}, 'invalid email error must be present' );
 
     my ( $MissingCompanyCreate, $MissingCompanyErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
         FirstName  => 'New',
@@ -336,7 +336,7 @@ my $OM = bless {
         UserID     => 2,
     );
     Assert( !$MissingCompanyCreate, 'missing company create must fail' );
-    Assert( grep { $_ eq 'CustomerID was not found or is not valid.' } @{$MissingCompanyErrors}, 'missing company error must be present' );
+    Assert( scalar grep { $_ eq 'CustomerID was not found or is not valid.' } @{$MissingCompanyErrors}, 'missing company error must be present' );
 
     my ( $DuplicateCreate, $DuplicateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
         FirstName  => 'Existing',
@@ -347,7 +347,7 @@ my $OM = bless {
         UserID     => 2,
     );
     Assert( !$DuplicateCreate, 'duplicate login create must fail' );
-    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateErrors}, 'duplicate active login error must be present' );
+    Assert( scalar grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateErrors}, 'duplicate active login error must be present' );
     Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate active login must prevent CustomerUserAdd' );
 
     my ( $DuplicateDisabledLoginCreate, $DuplicateDisabledLoginErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
@@ -359,7 +359,7 @@ my $OM = bless {
         UserID     => 2,
     );
     Assert( !$DuplicateDisabledLoginCreate, 'duplicate disabled login create must fail' );
-    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateDisabledLoginErrors}, 'duplicate disabled login error must be present' );
+    Assert( scalar grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateDisabledLoginErrors}, 'duplicate disabled login error must be present' );
     Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate disabled login must prevent CustomerUserAdd' );
 
     my ( $DuplicateActiveEmailCreate, $DuplicateActiveEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
@@ -371,7 +371,7 @@ my $OM = bless {
         UserID     => 2,
     );
     Assert( !$DuplicateActiveEmailCreate, 'duplicate active email create must fail' );
-    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateActiveEmailErrors}, 'duplicate active email error must be present' );
+    Assert( scalar grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateActiveEmailErrors}, 'duplicate active email error must be present' );
     Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate active email must prevent CustomerUserAdd' );
 
     my ( $DuplicateDisabledEmailCreate, $DuplicateDisabledEmailErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
@@ -383,7 +383,7 @@ my $OM = bless {
         UserID     => 2,
     );
     Assert( !$DuplicateDisabledEmailCreate, 'duplicate disabled email create must fail' );
-    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateDisabledEmailErrors}, 'duplicate disabled email error must be present' );
+    Assert( scalar grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateDisabledEmailErrors}, 'duplicate disabled email error must be present' );
     Assert( !exists $CustomerUserObject->{LastAdd}, 'duplicate disabled email must prevent CustomerUserAdd' );
 
     my ( $PasswordCreate, $PasswordCreateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserCreateData(
@@ -397,7 +397,7 @@ my $OM = bless {
     );
     Assert( !$PasswordCreate, 'create must reject supplied password input' );
     Assert(
-        grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{$PasswordCreateErrors},
+        scalar grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{$PasswordCreateErrors},
         'create must return safe supplied-password validation error',
     );
     Assert( !exists $CustomerUserObject->{LastAdd}, 'create with supplied password must not call CustomerUserAdd' );
@@ -414,7 +414,7 @@ my $OM = bless {
         );
         Assert( !$FailedPasswordCreate, 'empty generated password must fail create safely' );
         Assert(
-            grep { $_ eq 'Customer user password could not be generated.' } @{$FailedPasswordErrors},
+            scalar grep { $_ eq 'Customer user password could not be generated.' } @{$FailedPasswordErrors},
             'empty generated password must return safe generic error',
         );
         Assert( !exists $CustomerUserObject->{LastAdd}, 'empty generated password must prevent CustomerUserAdd' );
@@ -447,7 +447,7 @@ my $OM = bless {
     );
     Assert( !$PasswordUpdate, 'update must reject supplied password input' );
     Assert(
-        grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{$PasswordUpdateErrors},
+        scalar grep { $_ eq 'Password input is not supported. Use the normal password reset workflow.' } @{$PasswordUpdateErrors},
         'update must return safe supplied-password validation error',
     );
     Assert( !exists $CustomerUserObject->{LastUpdate}, 'update with supplied password must not call CustomerUserUpdate' );
@@ -487,7 +487,7 @@ my $OM = bless {
     );
     Assert( !$MismatchResponse->{Data}->{Updated}, 'mismatched route and body current login must not update' );
     Assert(
-        grep { $_ eq 'CurrentLogin must match the route CustomerUserLogin.' } @{ $MismatchResponse->{Data}->{Errors} },
+        scalar grep { $_ eq 'CurrentLogin must match the route CustomerUserLogin.' } @{ $MismatchResponse->{Data}->{Errors} },
         'mismatched route and body current login must return validation error',
     );
 
@@ -497,7 +497,7 @@ my $OM = bless {
         UserID            => 2,
     );
     Assert( !$DuplicateUpdate, 'duplicate target login update must fail' );
-    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateUpdateErrors}, 'duplicate active target login error must be present' );
+    Assert( scalar grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateUpdateErrors}, 'duplicate active target login error must be present' );
 
     delete $CustomerUserObject->{LastUpdate};
     my ( $DuplicateDisabledLoginUpdate, $DuplicateDisabledLoginUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
@@ -506,7 +506,7 @@ my $OM = bless {
         UserID            => 2,
     );
     Assert( !$DuplicateDisabledLoginUpdate, 'duplicate disabled target login update must fail' );
-    Assert( grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateDisabledLoginUpdateErrors}, 'duplicate disabled target login error must be present' );
+    Assert( scalar grep { $_ eq 'Login is already used by another customer user.' } @{$DuplicateDisabledLoginUpdateErrors}, 'duplicate disabled target login error must be present' );
     Assert( !exists $CustomerUserObject->{LastUpdate}, 'duplicate disabled target login must prevent CustomerUserUpdate' );
 
     my ( $DuplicateActiveEmailUpdate, $DuplicateActiveEmailUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
@@ -515,7 +515,7 @@ my $OM = bless {
         UserID            => 2,
     );
     Assert( !$DuplicateActiveEmailUpdate, 'duplicate active target email update must fail' );
-    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateActiveEmailUpdateErrors}, 'duplicate active target email error must be present' );
+    Assert( scalar grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateActiveEmailUpdateErrors}, 'duplicate active target email error must be present' );
     Assert( !exists $CustomerUserObject->{LastUpdate}, 'duplicate active target email must prevent CustomerUserUpdate' );
 
     my ( $DuplicateDisabledEmailUpdate, $DuplicateDisabledEmailUpdateErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
@@ -524,7 +524,7 @@ my $OM = bless {
         UserID            => 2,
     );
     Assert( !$DuplicateDisabledEmailUpdate, 'duplicate disabled target email update must fail' );
-    Assert( grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateDisabledEmailUpdateErrors}, 'duplicate disabled target email error must be present' );
+    Assert( scalar grep { $_ eq 'Email is already used by another customer user.' } @{$DuplicateDisabledEmailUpdateErrors}, 'duplicate disabled target email error must be present' );
     Assert( !exists $CustomerUserObject->{LastUpdate}, 'duplicate disabled target email must prevent CustomerUserUpdate' );
 
     my ( $UnchangedIdentity, $UnchangedIdentityErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
@@ -542,7 +542,7 @@ my $OM = bless {
         UserID            => 2,
     );
     Assert( !$NotFoundUpdate, 'missing customer update must fail' );
-    Assert( grep { $_ eq 'Customer user not found.' } @{$NotFoundUpdateErrors}, 'missing customer update must return structured error' );
+    Assert( scalar grep { $_ eq 'Customer user not found.' } @{$NotFoundUpdateErrors}, 'missing customer update must return structured error' );
 
     my ( $Renamed, $RenameErrors ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserUpdateData(
         CustomerUserLogin => 'existing@example.com',
