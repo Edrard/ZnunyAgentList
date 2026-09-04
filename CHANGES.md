@@ -4,7 +4,8 @@
 
 - Added optional `ReconcileTickets=1` support to `CustomerUser::Create` for correcting existing ticket `CustomerID` values after native customer-user creation.
 - Kept create reconciliation opt-in and limited to standard Znuny `TicketSearch()`, `TicketGet()`, and `TicketCustomerSet()` APIs without changing ticket `CustomerUserID`.
-- Documented partial reconciliation failure behavior and preserved native `CustomerUser::Update` semantics.
+- Kept `ReconcileTickets` optional and disabled by default so existing CustomerUser Create clients do not need to send it.
+- Documented partial reconciliation failure behavior and preserved native `CustomerUser::Update` reconciliation/event semantics unchanged.
 
 ## 1.6.10 - Unreleased
 

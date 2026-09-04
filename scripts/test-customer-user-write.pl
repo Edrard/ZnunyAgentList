@@ -506,6 +506,34 @@ my $SearchKeys = 'Status,UserCustomerID,UserEmail,UserFirstname,UserLastname,Use
     );
     Assert( !exists $AuthPasswordCreateResponse->{Data}->{ReconcileTickets}, 'Create operation without ReconcileTickets must preserve original response shape' );
     Assert( !( $TicketObject->{SearchCount} || 0 ), 'Create operation without ReconcileTickets must not search tickets' );
+    Assert( !( $TicketObject->{SetCount} || 0 ), 'Create operation without ReconcileTickets must not update tickets' );
+    Assert(
+        !scalar( grep { $_ eq 'ReconcileTickets must be 0 or 1.' } @{ $AuthPasswordCreateResponse->{Data}->{Errors} } ),
+        'Create operation without ReconcileTickets must not return ReconcileTickets validation error',
+    );
+
+    $TicketObject->Reset();
+    delete $CustomerUserObject->{LastAdd};
+    my $UndefinedReconcileCreateResponse = $CreateOperation->Run(
+        ReconcileTickets => undef,
+        Data             => {
+            UserLogin  => 'api-user',
+            Password   => 'api-auth-secret',
+            FirstName  => 'Undefined',
+            LastName   => 'Reconcile',
+            Login      => 'undefined-reconcile@example.com',
+            Email      => 'undefined-reconcile@example.com',
+            CustomerID => 'second-customer',
+        },
+    );
+    Assert( $UndefinedReconcileCreateResponse->{Data}->{Created}, 'Create operation with transport-level undef ReconcileTickets must create customer user' );
+    Assert( !exists $UndefinedReconcileCreateResponse->{Data}->{ReconcileTickets}, 'Create operation with undef ReconcileTickets must preserve original response shape' );
+    Assert(
+        !scalar( grep { $_ eq 'ReconcileTickets must be 0 or 1.' } @{ $UndefinedReconcileCreateResponse->{Data}->{Errors} } ),
+        'Create operation with undef ReconcileTickets must not return validation error',
+    );
+    Assert( !( $TicketObject->{SearchCount} || 0 ), 'Create operation with undef ReconcileTickets must not search tickets' );
+    Assert( !( $TicketObject->{SetCount} || 0 ), 'Create operation with undef ReconcileTickets must not update tickets' );
 
     $TicketObject->Reset();
     delete $CustomerUserObject->{LastAdd};
@@ -524,6 +552,7 @@ my $SearchKeys = 'Status,UserCustomerID,UserEmail,UserFirstname,UserLastname,Use
     Assert( $ReconcileZeroCreateResponse->{Data}->{Created}, 'Create operation with ReconcileTickets 0 must still create customer user' );
     Assert( !exists $ReconcileZeroCreateResponse->{Data}->{ReconcileTickets}, 'Create operation with ReconcileTickets 0 must not add reconciliation stats' );
     Assert( !( $TicketObject->{SearchCount} || 0 ), 'Create operation with ReconcileTickets 0 must not search tickets' );
+    Assert( !( $TicketObject->{SetCount} || 0 ), 'Create operation with ReconcileTickets 0 must not update tickets' );
 
     $TicketObject->Reset();
     delete $CustomerUserObject->{LastAdd};

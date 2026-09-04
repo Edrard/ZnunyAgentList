@@ -28,10 +28,17 @@ sub Run {
         = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->CustomerUserPasswordInputProvided( \%Param );
 
     my $ReconcileRequested = 0;
-    if ( Kernel::GenericInterface::Operation::ZnunyAgentList::Common->ParamExists( \%Param, 'ReconcileTickets' ) ) {
-        my ( $ReconcileOK, $ReconcileValue ) = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->OptionalZeroOne(
-            Kernel::GenericInterface::Operation::ZnunyAgentList::Common->Param( \%Param, 'ReconcileTickets' ),
-        );
+    my $RawReconcileTickets;
+    if ( Kernel::GenericInterface::Operation::ZnunyAgentList::Common->BodyParamExists( \%Param, 'ReconcileTickets' ) ) {
+        $RawReconcileTickets = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->BodyParam( \%Param, 'ReconcileTickets' );
+    }
+    elsif ( exists $Param{ReconcileTickets} ) {
+        $RawReconcileTickets = $Param{ReconcileTickets};
+    }
+
+    if ( defined $RawReconcileTickets ) {
+        my ( $ReconcileOK, $ReconcileValue )
+            = Kernel::GenericInterface::Operation::ZnunyAgentList::Common->OptionalZeroOne($RawReconcileTickets);
 
         if ( !$ReconcileOK ) {
             return {

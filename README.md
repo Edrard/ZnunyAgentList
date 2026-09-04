@@ -2230,11 +2230,13 @@ customer who needs Customer Portal access must use the normal administrative or
 password-reset workflow to receive a new password.
 
 `ReconcileTickets` is a Create-only opt-in flag. Omitted or `0` preserves native
-Znuny CustomerUser create behavior and performs no ticket scan. `1` runs a
+Znuny CustomerUser create behavior and performs no ticket scan. Existing clients
+do not need to send `ReconcileTickets`; omission is equivalent to `0`, so older
+`POST /CustomerUser` integrations remain backward compatible. `1` runs a
 post-create reconciliation for existing tickets whose `CustomerUserID` exactly
 matches the newly created login, including archived and non-archived tickets.
-Native Znuny CustomerUser create does not reconcile those historical ticket
-records by itself.
+This enhancement exists because native Znuny CustomerUser create does not
+reconcile those historical ticket records by itself.
 
 The reconciliation updates only ticket `CustomerID` through Znuny's standard
 ticket customer API when the ticket still points to a different customer ID.
@@ -2301,6 +2303,15 @@ unchanged. Duplicate target logins and emails are checked against active and
 disabled customer users before calling Znuny's update API. An unchanged login or
 email on the same customer user is allowed. Failed uniqueness validation
 performs no native customer-user write.
+
+Update intentionally preserves Znuny's native CustomerUserUpdate behavior. Znuny
+may reconcile ticket customer data through its native CustomerUserUpdate event,
+but only for tickets matching the old customer identity pair: old
+`CustomerUserID` / login and old `CustomerID`. For those matching tickets,
+changing the login can update ticket `CustomerUserID`, and changing `CustomerID`
+can update ticket `CustomerID`. Tickets that do not match the old pair are left
+untouched by the native mechanism. The plugin adds no custom reconciliation
+logic to `CustomerUser::Update`; `ReconcileTickets` belongs only to Create.
 
 ### Error Responses
 
