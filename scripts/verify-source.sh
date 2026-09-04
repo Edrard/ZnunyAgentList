@@ -32,6 +32,20 @@ xpath_count() {
     xmllint --xpath "count($1)" "$2" 2>/dev/null
 }
 
+array_contains_exact() {
+    local Needle=$1
+    shift
+
+    local Item
+    for Item in "$@"; do
+        if [ "$Item" = "$Needle" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 printf 'ZnunyAgentList source verification for server-side review\n'
 printf 'Repository root: %s\n\n' "$ROOT"
 printf 'This script performs read-only source checks. It does not build, install,\n'
@@ -216,7 +230,7 @@ else
     for RuntimeFile in "${RUNTIME_FILES[@]}"; do
         require_file "$RuntimeFile"
 
-        if printf '%s\n' "${SOPM_LOCATIONS[@]}" | grep -Fxq "$RuntimeFile"; then
+        if array_contains_exact "$RuntimeFile" "${SOPM_LOCATIONS[@]}"; then
             pass "SOPM contains runtime file: $RuntimeFile"
         else
             fail "SOPM is missing runtime file: $RuntimeFile"
@@ -224,7 +238,7 @@ else
     done
 
     for SopmLocation in "${SOPM_LOCATIONS[@]}"; do
-        if printf '%s\n' "${RUNTIME_FILES[@]}" | grep -Fxq "$SopmLocation"; then
+        if array_contains_exact "$SopmLocation" "${RUNTIME_FILES[@]}"; then
             :
         else
             fail "SOPM contains unexpected runtime location: $SopmLocation"
