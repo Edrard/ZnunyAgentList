@@ -597,19 +597,33 @@ fi
 if grep -Fq 'GET /CustomerUserLookup' "$ROOT/README.md" \
     && grep -Fq 'POST /CustomerUser' "$ROOT/README.md" \
     && grep -Fq 'PATCH /CustomerUser/:CustomerUserLogin' "$ROOT/README.md" \
+    && grep -Fq '#### Create Customer User' "$ROOT/README.md" \
+    && grep -Fq '#### Update Customer User' "$ROOT/README.md" \
+    && grep -Fq '#### Create With Historical Ticket Reconciliation' "$ROOT/README.md" \
+    && grep -Fq '##### ReconcileTickets Contract' "$ROOT/README.md" \
     && grep -Fq 'GET /CustomerCompany' "$ROOT/README.md" \
     && grep -Fq 'TotalCount' "$ROOT/README.md" \
     && grep -Fq 'HasMore' "$ROOT/README.md" \
     && grep -Fq 'Offset' "$ROOT/README.md" \
     && grep -Fq 'Company ID' "$ROOT/README.md" \
     && grep -Fq 'ReconcileTickets' "$ROOT/README.md" \
-    && grep -Fq 'Create-only opt-in' "$ROOT/README.md" \
+    && grep -Fq 'omitted | Disabled; equivalent to `0`' "$ROOT/README.md" \
+    && grep -Fq '| `0` | Disabled.' "$ROOT/README.md" \
+    && grep -Fq '| `1` | Enabled after successful customer-user creation.' "$ROOT/README.md" \
+    && grep -Fq 'ReconcileTickets must be 0 or 1.' "$ROOT/README.md" \
+    && grep -Fq '100,000 exact matching tickets per Create request' "$ROOT/README.md" \
     && grep -Fq 'Ticket `CustomerUserID` is preserved' "$ROOT/README.md" \
     && grep -Fq 'including archived and non-archived tickets' "$ROOT/README.md" \
-    && grep -Fq 'CustomerUser::Update` is not affected' "$ROOT/README.md" \
+    && grep -Fq 'native CustomerUserUpdate behavior' "$ROOT/README.md" \
+    && grep -Fq 'Ticket.CustomerUserID == old CustomerUser Login' "$ROOT/README.md" \
+    && grep -Fq 'Ticket.CustomerID     == old CustomerUser CustomerID' "$ROOT/README.md" \
+    && grep -Fq '`ReconcileTickets` is not supported on Update' "$ROOT/README.md" \
+    && grep -Fq '"Updated": 1' "$ROOT/README.md" \
+    && grep -Fq 'CurrentLogin` | Yes | No' "$ROOT/README.md" \
     && grep -Fq 'Password input is not supported' "$ROOT/README.md" \
     && grep -Fq 'generates a private random password' "$ROOT/README.md" \
     && grep -Fq 'password-reset workflow' "$ROOT/README.md" \
+    && grep -Fq 'unique across active and disabled customer users' "$ROOT/README.md" \
     && grep -Fq 'Search and Lookup include active and disabled customer users' "$ROOT/README.md" \
     && grep -Fq 'Search preserves' "$ROOT/README.md" \
     && grep -Fq 'UserLogin`, `UserEmail`, `UserCustomerID`, `UserFirstname`' "$ROOT/README.md" \

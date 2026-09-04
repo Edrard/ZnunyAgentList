@@ -2199,7 +2199,27 @@ safe ticket metadata or update the local cache.
 
 ### Customer User Writes
 
+#### Create Customer User
+
+##### Endpoint
+
 `POST /CustomerUser`
+
+Requires normal GenericInterface authentication plus ZnunyAgentList write
+authorization.
+
+##### Request Fields
+
+| Field | Required | Behavior |
+| --- | --- | --- |
+| `FirstName` | Yes | New customer user's first name. Empty values are rejected. |
+| `LastName` | Yes | New customer user's last name. Empty values are rejected. |
+| `Login` | Yes | New customer-user login. Must be unique across active and disabled customer users. |
+| `Email` | Yes | New customer-user email. Must be valid and unique across active and disabled customer users. |
+| `CustomerID` | Yes | Znuny customer company ID, shown as `Company ID` in the agent UI. Must exist as a valid customer company. |
+| `ReconcileTickets` | No | Create-only opt-in enhancement. Omitted and `0` are disabled; `1` is enabled; any other explicit value is rejected before Create. |
+
+##### Basic Create Example
 
 ```json
 {
@@ -2219,20 +2239,10 @@ Normal Create uses Znuny's native CustomerUser API and preserves its standard
 Create behavior. Native Znuny Create creates the customer user but does not
 modify or reconcile historical tickets.
 
-Login and email uniqueness is enforced across active and disabled customer
-users before Znuny's write API is called. A uniqueness validation failure returns
-structured errors and performs no native customer-user write.
+##### Successful Response
 
-`Password` is reserved for GenericInterface authentication and is not used to
-set a CustomerUser password. Znuny's REST transport merges authentication and
-query fields into operation data, so generic `Password` cannot be safely treated
-as a CustomerUser password field. Create generates a private random password
-internally and never returns it. `UserPassword` is explicitly rejected with
-`Password input is not supported. Use the normal password reset workflow.` A
-customer who needs Customer Portal access must use the normal administrative or
-password-reset workflow to receive a new password.
-
-Normal Create response:
+When `ReconcileTickets` is omitted or `0`, no ticket search is performed and no
+`ReconcileTickets` response object is returned.
 
 ```json
 {
@@ -2254,10 +2264,69 @@ Normal Create response:
 }
 ```
 
+The `CustomerUser` object contains canonical fields plus legacy `User*` aliases
+for backward compatibility: `Login`, `Email`, `CustomerID`, `FirstName`,
+`LastName`, `Status`, `UserLogin`, `UserEmail`, `UserCustomerID`,
+`UserFirstname`, and `UserLastname`.
+
+##### Password Behavior
+
+`Password` is reserved for GenericInterface authentication and is not used to
+set a CustomerUser password. Znuny's REST transport can merge authentication and
+query fields into operation data, so generic `Password` cannot be safely treated
+as a CustomerUser password field.
+
+Create generates a private random password internally, passes it only to Znuny's
+native `CustomerUserAdd()` call, and never returns it. `UserPassword` is
+explicitly rejected with:
+
+```json
+{
+  "Created": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "Password input is not supported. Use the normal password reset workflow."
+  ]
+}
+```
+
+A customer who needs Customer Portal access must use the normal administrative
+or password-reset workflow to receive a new password.
+
+##### Validation / Uniqueness Behavior
+
+Login and email uniqueness is enforced across active and disabled customer
+users before Znuny's write API is called. A uniqueness validation failure
+returns structured errors and performs no native customer-user write.
+
+Common Create validation errors include:
+
+```json
+{
+  "Created": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "Login is already used by another customer user.",
+    "Email is already used by another customer user.",
+    "CustomerID was not found or is not valid."
+  ]
+}
+```
+
+##### Curl Example
+
+```bash
+curl -sS -X POST "$ZNUNY_BASE_URL/CustomerUser?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H 'Content-Type: application/json' \
+  -d '{"FirstName":"John","LastName":"Doe","Login":"john.doe@example.com","Email":"john.doe@example.com","CustomerID":"example-customer"}'
+```
+
 #### Create With Historical Ticket Reconciliation
 
 `ReconcileTickets` is a Create-only ZnunyAgentList enhancement layered on top of
 successful native Create.
+
+##### ReconcileTickets Contract
 
 | `ReconcileTickets` value | Behavior |
 | --- | --- |
@@ -2269,7 +2338,20 @@ successful native Create.
 Existing integrations do not need to send `ReconcileTickets`; omitted and `0`
 preserve backward-compatible normal Create behavior.
 
-Request:
+Any explicit value other than `0` or `1` is rejected before customer-user
+creation:
+
+```json
+{
+  "Created": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "ReconcileTickets must be 0 or 1."
+  ]
+}
+```
+
+##### Request Example
 
 ```json
 {
@@ -2282,19 +2364,24 @@ Request:
 }
 ```
 
-With `ReconcileTickets=1`, reconciliation searches up to 100,000 exact matching
-tickets per Create request, including archived and non-archived tickets. The
-match is exact: ticket `CustomerUserID` must equal the newly created customer
-user `Login`.
+##### Reconciliation Rules
+
+With `ReconcileTickets=1`, reconciliation runs only after successful native
+Create. It searches up to 100,000 exact matching tickets per Create request,
+including archived and non-archived tickets. The match is exact:
+ticket `CustomerUserID` must equal the newly created customer user `Login`.
 
 The reconciliation updates only ticket `CustomerID` through Znuny's standard
-ticket customer API when the ticket still points to a different customer ID.
+ticket customer API, `TicketCustomerSet()`, when the ticket still points to a
+different customer ID.
 Ticket `CustomerUserID` is preserved. Already-correct tickets are skipped. If
 one ticket update fails after the CustomerUser was created, the CustomerUser is
 not rolled back; `Created` remains `1` and the reconciliation error is reported
 separately.
 
-Reconciliation statistics:
+Native Znuny CustomerUpdate history/events are generated for changed tickets.
+
+##### Response Statistics
 
 | Field | Meaning |
 | --- | --- |
@@ -2305,7 +2392,7 @@ Reconciliation statistics:
 | `Failed` | Tickets that could not be read or updated. |
 | `Errors` | Per-ticket or reconciliation-level error details. |
 
-Response:
+##### Successful Response
 
 ```json
 {
@@ -2335,7 +2422,59 @@ Response:
 }
 ```
 
+##### Partial Failure Semantics
+
+Individual ticket reconciliation failures do not roll back the successfully
+created customer user. In that case `Created` remains `1`, `Failed` is
+incremented, and `Errors` contains the affected ticket details.
+
+##### Curl Example
+
+```bash
+curl -sS -X POST "$ZNUNY_BASE_URL/CustomerUser?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H 'Content-Type: application/json' \
+  -d '{"FirstName":"John","LastName":"Doe","Login":"john.doe@example.com","Email":"john.doe@example.com","CustomerID":"example-customer","ReconcileTickets":1}'
+```
+
+#### Update Customer User
+
+##### Endpoint
+
 `PATCH /CustomerUser/:CustomerUserLogin`
+
+Requires normal GenericInterface authentication plus ZnunyAgentList write
+authorization. The path value identifies the current customer user.
+
+##### Path And Authentication
+
+`CustomerUserLogin` in the path is the target customer-user login to update.
+`UserLogin` in the query string or transport data remains GenericInterface
+authentication only and is not treated as the target customer user. URL-encode
+the path value when the login contains characters that are not safe in a URL
+path segment.
+
+##### Request Fields
+
+| Field | Accepted | Required | Behavior |
+| --- | --- | --- | --- |
+| `CurrentLogin` | Yes | No | Compatibility input. If supplied, it must exactly match path `CustomerUserLogin`; otherwise the request is rejected. |
+| `Login` | Yes | No | New login. Omit to preserve the current login. Empty values are rejected. Must be unique across active and disabled customer users, excluding the current record. |
+| `FirstName` | Yes | No | New first name. Omit to preserve the current first name. Empty values are rejected if supplied or if the stored value is empty. |
+| `LastName` | Yes | No | New last name. Omit to preserve the current last name. Empty values are rejected if supplied or if the stored value is empty. |
+| `Email` | Yes | No | New email. Omit to preserve the current email. Must be valid and unique across active and disabled customer users, excluding the current record. |
+| `CustomerID` | Yes | No | New customer company ID. Omit to preserve the current CustomerID. Must exist as a valid customer company. |
+| `Password` | Authentication only | No | GenericInterface authentication input when paired with auth `UserLogin`. It is not used as a CustomerUser password and is rejected if supplied as visible body password input. |
+| `UserPassword` | No | No | Rejected with `Password input is not supported. Use the normal password reset workflow.` |
+| `ReconcileTickets` | No | No | Not supported on Update. It is ignored as an unknown update field and does not trigger ticket reconciliation. |
+
+##### Partial Update Semantics
+
+Omitted `FirstName`, `LastName`, `Login`, `Email`, and `CustomerID` are
+preserved from the existing customer-user record. An unchanged login or email on
+the same customer user is valid. Failed validation performs no native
+customer-user write.
+
+##### Basic Update Example
 
 ```json
 {
@@ -2346,16 +2485,98 @@ Response:
 }
 ```
 
-The path `CustomerUserLogin` identifies the current customer user and is
-authoritative. Clients do not need to duplicate it as `CurrentLogin` in the JSON
-body. If `CurrentLogin` is supplied for compatibility, it must exactly match the
-path value or the request is rejected. Unspecified fields are preserved from the
-existing customer-user record: omitted `FirstName`, `LastName`, `Email`,
-`CustomerID`, and `Login` keep their current values. Password input is not
-supported for this REST endpoint, so Update never changes customer-user
-passwords. `Password` remains reserved for GenericInterface authentication and
-is ignored as CustomerUser password input; `UserPassword` is explicitly rejected
-with `Password input is not supported. Use the normal password reset workflow.`
+##### Successful Response
+
+```json
+{
+  "Updated": 1,
+  "CustomerUser": {
+    "Login": "john.doe@example.com",
+    "CustomerID": "example-customer",
+    "FirstName": "Jane",
+    "LastName": "Doe",
+    "Email": "jane.doe@example.com",
+    "Status": "active",
+    "UserLogin": "john.doe@example.com",
+    "UserEmail": "jane.doe@example.com",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "Jane",
+    "UserLastname": "Doe"
+  },
+  "Errors": []
+}
+```
+
+##### Login Rename Example
+
+The path still contains the old/current login. The body `Login` contains the new
+login. Clients do not need to duplicate the old login as `CurrentLogin`.
+
+```json
+{
+  "Login": "john.renamed@example.com"
+}
+```
+
+Response:
+
+```json
+{
+  "Updated": 1,
+  "CustomerUser": {
+    "Login": "john.renamed@example.com",
+    "CustomerID": "example-customer",
+    "FirstName": "John",
+    "LastName": "Doe",
+    "Email": "john.doe@example.com",
+    "Status": "active",
+    "UserLogin": "john.renamed@example.com",
+    "UserEmail": "john.doe@example.com",
+    "UserCustomerID": "example-customer",
+    "UserFirstname": "John",
+    "UserLastname": "Doe"
+  },
+  "Errors": []
+}
+```
+
+If `CurrentLogin` is supplied, it must match the path:
+
+```json
+{
+  "Updated": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "CurrentLogin must match the route CustomerUserLogin."
+  ]
+}
+```
+
+##### CustomerID Change Example
+
+This changes only the CustomerID and preserves the login:
+
+```json
+{
+  "CustomerID": "new-example-customer"
+}
+```
+
+For tickets matching the old identity pair, native Znuny behavior may update
+ticket `CustomerID`; ticket `CustomerUserID` remains unchanged when the login
+itself was not changed.
+
+##### Login And CustomerID Change Example
+
+```json
+{
+  "Login": "john.renamed@example.com",
+  "CustomerID": "new-example-customer"
+}
+```
+
+For tickets matching the old identity pair, native Znuny behavior may update
+both ticket customer fields.
 
 Login rename is supported through Znuny's native
 `CustomerUserUpdate(ID => CurrentLogin, UserLogin => Login, ...)` path by
@@ -2364,6 +2585,8 @@ unchanged. Duplicate target logins and emails are checked against active and
 disabled customer users before calling Znuny's update API. An unchanged login or
 email on the same customer user is allowed. Failed uniqueness validation
 performs no native customer-user write.
+
+##### Native Ticket Reconciliation Behavior
 
 Update intentionally preserves Znuny's native CustomerUserUpdate behavior. Znuny
 may reconcile ticket customer data through its native CustomerUserUpdate event,
@@ -2385,6 +2608,75 @@ Ticket.CustomerID     == old CustomerUser CustomerID
 `ReconcileTickets` is not supported on Update. The plugin adds no custom ticket
 reconciliation logic to `PATCH /CustomerUser/:CustomerUserLogin`; Update
 continues to use native Znuny event semantics.
+
+##### Validation / Error Examples
+
+Duplicate target login or email:
+
+```json
+{
+  "Updated": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "Login is already used by another customer user.",
+    "Email is already used by another customer user."
+  ]
+}
+```
+
+Unsupported password input:
+
+```json
+{
+  "Updated": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "Password input is not supported. Use the normal password reset workflow."
+  ]
+}
+```
+
+Invalid customer company:
+
+```json
+{
+  "Updated": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "CustomerID was not found or is not valid."
+  ]
+}
+```
+
+Customer user not found:
+
+```json
+{
+  "Updated": 0,
+  "CustomerUser": null,
+  "Errors": [
+    "Customer user not found."
+  ]
+}
+```
+
+##### Curl Examples
+
+Basic partial update:
+
+```bash
+curl -sS -X PATCH "$ZNUNY_BASE_URL/CustomerUser/john.doe%40example.com?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H 'Content-Type: application/json' \
+  -d '{"FirstName":"Jane","LastName":"Doe","Email":"jane.doe@example.com"}'
+```
+
+Login rename:
+
+```bash
+curl -sS -X PATCH "$ZNUNY_BASE_URL/CustomerUser/john.doe%40example.com?UserLogin=$ZNUNY_API_USER&Password=$ZNUNY_API_PASS" \
+  -H 'Content-Type: application/json' \
+  -d '{"Login":"john.renamed@example.com"}'
+```
 
 ### Error Responses
 
