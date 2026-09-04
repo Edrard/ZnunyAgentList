@@ -97,10 +97,10 @@ Provider:
       Type: Queue::AssignableAgents
     CustomerUserSearch:
       Description: >-
-        Searches valid Znuny customer users for integration UI selection. Broad
-        wildcard-only searches are rejected by the operation to reduce
-        enumeration risk. Requires authenticated agent access and membership in
-        the configured ZnunyAgentList allowed group.
+        Searches active and disabled Znuny customer users for integration UI
+        selection. Broad wildcard-only searches are rejected by the operation
+        to reduce enumeration risk. Requires authenticated agent access and
+        membership in the configured ZnunyAgentList allowed group.
       IncludeTicketData: '0'
       Type: CustomerUser::Search
     CustomerUserGet:

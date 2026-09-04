@@ -1,14 +1,18 @@
 # ZnunyAgentList Changelog
 
-## 1.6.9 - Unreleased
+## 1.6.9 - 2026-09-04
 
+- Included disabled customer users in `CustomerUser::Search` and exact `CustomerUser::Lookup` results.
+- Added explicit `Status` values of `active` or `disabled` to safe customer-user responses.
+- Enforced `CustomerUser::Create` and `CustomerUser::Update` login and email uniqueness across active and disabled customer users before write calls.
+- Allowed `CustomerUser::Update` to keep unchanged login and email values for the current user without self-collision errors.
 - Fixed `CustomerUser::Create` and `CustomerUser::Update` so GenericInterface authentication `Password` parameters are not mistaken for unsupported customer-user password input.
+- Kept `UserPassword` explicitly unsupported for CustomerUser API input.
+- Kept `CustomerUser::Create` on private internally generated passwords and `CustomerUser::Update` free of password changes.
 
 ## 1.6.8 - 2026-09-04
 
-- Included disabled customer users in `CustomerUser::Search` and exact `CustomerUser::Lookup` results with an explicit `Status` field.
-- Hardened customer-user create/update uniqueness checks against active and disabled login/email collisions before calling Znuny write APIs.
-- Standardized safe customer-user response fields to `Login`, `CustomerID`, `FirstName`, `LastName`, `Email`, and `Status`.
+- Prepared customer-user read and write regression coverage before live `1.6.9` validation.
 
 ## 1.6.7 - 2026-08-26
 

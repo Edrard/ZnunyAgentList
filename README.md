@@ -2197,11 +2197,19 @@ safe ticket metadata or update the local cache.
 
 `FirstName`, `LastName`, `Login`, `Email`, and `CustomerID` are required.
 `CustomerID` is the Znuny value shown as `Company ID` in the agent UI and must
-exist as a valid customer company. Password input is not supported for this REST
-endpoint. Znuny's REST transport can record raw non-GET request bodies in
-GenericInterface debug output, so caller-supplied passwords are rejected. Create
-generates a private random password internally and never returns it. A customer
-who needs Customer Portal access must use the normal administrative or
+exist as a valid customer company.
+
+Login and email uniqueness is enforced across active and disabled customer
+users before Znuny's write API is called. A uniqueness validation failure returns
+structured errors and performs no native customer-user write.
+
+`Password` is reserved for GenericInterface authentication and is not used to
+set a CustomerUser password. Znuny's REST transport merges authentication and
+query fields into operation data, so generic `Password` cannot be safely treated
+as a CustomerUser password field. Create generates a private random password
+internally and never returns it. `UserPassword` is explicitly rejected with
+`Password input is not supported. Use the normal password reset workflow.` A
+customer who needs Customer Portal access must use the normal administrative or
 password-reset workflow to receive a new password.
 
 ```json
@@ -2236,15 +2244,18 @@ body. If `CurrentLogin` is supplied for compatibility, it must exactly match the
 path value or the request is rejected. Unspecified fields are preserved from the
 existing customer-user record: omitted `FirstName`, `LastName`, `Email`,
 `CustomerID`, and `Login` keep their current values. Password input is not
-supported for this REST endpoint, so Update does not change customer-user
-passwords.
+supported for this REST endpoint, so Update never changes customer-user
+passwords. `Password` remains reserved for GenericInterface authentication and
+is ignored as CustomerUser password input; `UserPassword` is explicitly rejected
+with `Password input is not supported. Use the normal password reset workflow.`
 
 Login rename is supported through Znuny's native
 `CustomerUserUpdate(ID => CurrentLogin, UserLogin => Login, ...)` path by
 providing `Login`; if omitted or identical to the path login, the login remains
 unchanged. Duplicate target logins and emails are checked against active and
 disabled customer users before calling Znuny's update API. An unchanged login or
-email on the same customer user is allowed.
+email on the same customer user is allowed. Failed uniqueness validation
+performs no native customer-user write.
 
 ### Error Responses
 
